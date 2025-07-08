@@ -1,5 +1,5 @@
 import 'package:hive/hive.dart';
-import '../../domain/entities/message.dart';
+import '../../../../core/models/message_types.dart';
 
 part 'message_model.g.dart';
 
@@ -36,37 +36,27 @@ class MessageModel extends HiveObject {
     this.voiceDurationInSeconds,
   });
 
-  factory MessageModel.fromEntity(Message message) {
+  Duration? get voiceDuration => voiceDurationInSeconds != null
+      ? Duration(seconds: voiceDurationInSeconds!)
+      : null;
+
+  MessageModel copyWith({
+    String? id,
+    String? content,
+    MessageType? type,
+    DateTime? timestamp,
+    bool? isSent,
+    String? voiceFilePath,
+    int? voiceDurationInSeconds,
+  }) {
     return MessageModel(
-      id: message.id,
-      content: message.content,
-      type: message.type,
-      timestamp: message.timestamp,
-      isSent: message.isSent,
-      voiceFilePath: message.voiceFilePath,
-      voiceDurationInSeconds: message.voiceDuration?.inSeconds,
+      id: id ?? this.id,
+      content: content ?? this.content,
+      type: type ?? this.type,
+      timestamp: timestamp ?? this.timestamp,
+      isSent: isSent ?? this.isSent,
+      voiceFilePath: voiceFilePath ?? this.voiceFilePath,
+      voiceDurationInSeconds: voiceDurationInSeconds ?? this.voiceDurationInSeconds,
     );
   }
-
-  Message toEntity() {
-    return Message(
-      id: id,
-      content: content,
-      type: type,
-      timestamp: timestamp,
-      isSent: isSent,
-      voiceFilePath: voiceFilePath,
-      voiceDuration: voiceDurationInSeconds != null
-          ? Duration(seconds: voiceDurationInSeconds!)
-          : null,
-    );
-  }
-}
-
-@HiveType(typeId: 1)
-enum MessageType {
-  @HiveField(0)
-  text,
-  @HiveField(1)
-  voice,
 }

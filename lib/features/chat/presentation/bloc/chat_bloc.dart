@@ -1,6 +1,6 @@
 import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import '../../domain/entities/message.dart';
+import '../../data/models/message_model.dart';
 import '../../data/repositories/chat_repository_impl.dart';
 
 // Events
@@ -33,7 +33,7 @@ class SendVoiceMessage extends ChatEvent {
 }
 
 class ReceiveMessage extends ChatEvent {
-  final Message message;
+  final MessageModel message;
 
   const ReceiveMessage(this.message);
 
@@ -60,7 +60,7 @@ class ChatInitial extends ChatState {}
 class ChatLoading extends ChatState {}
 
 class ChatLoaded extends ChatState {
-  final List<Message> messages;
+  final List<MessageModel> messages;
   final bool isRecording;
 
   const ChatLoaded({
@@ -72,7 +72,7 @@ class ChatLoaded extends ChatState {
   List<Object?> get props => [messages, isRecording];
 
   ChatLoaded copyWith({
-    List<Message>? messages,
+    List<MessageModel>? messages,
     bool? isRecording,
   }) {
     return ChatLoaded(

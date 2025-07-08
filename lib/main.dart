@@ -10,7 +10,7 @@ import 'features/chat/presentation/pages/room_selection_page.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize Firebase - Disabled for BroadcastChannel testing
+  // Initialize Firebase for Firestore signaling
   // await Firebase.initializeApp(
   //   options: DefaultFirebaseOptions.currentPlatform,
   // );

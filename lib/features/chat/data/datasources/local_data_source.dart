@@ -1,6 +1,6 @@
 import 'package:hive/hive.dart';
-import '../../domain/entities/message.dart';
 import '../models/message_model.dart';
+import '../../../../core/models/message_types.dart';
 
 class LocalDataSource {
   static const String _messagesBoxName = 'messages';
@@ -12,6 +12,7 @@ class LocalDataSource {
       Hive.registerAdapter(MessageModelAdapter());
     }
     if (!Hive.isAdapterRegistered(1)) {
+      // Import the generated adapter
       Hive.registerAdapter(MessageTypeAdapter());
     }
 
@@ -19,20 +20,19 @@ class LocalDataSource {
     _messagesBox = await Hive.openBox<MessageModel>(_messagesBoxName);
   }
 
-  Future<List<Message>> getMessages() async {
+  Future<List<MessageModel>> getMessages() async {
     await _ensureInitialized();
 
     final messageModels = _messagesBox!.values.toList();
     messageModels.sort((a, b) => a.timestamp.compareTo(b.timestamp));
 
-    return messageModels.map((model) => model.toEntity()).toList();
+    return messageModels;
   }
 
-  Future<void> saveMessage(Message message) async {
+  Future<void> saveMessage(MessageModel message) async {
     await _ensureInitialized();
 
-    final messageModel = MessageModel.fromEntity(message);
-    await _messagesBox!.put(message.id, messageModel);
+    await _messagesBox!.put(message.id, message);
   }
 
   Future<void> clearMessages() async {

@@ -104,7 +104,7 @@ class _P2PTestPageState extends State<P2PTestPage> {
                         style: const TextStyle(fontWeight: FontWeight.bold)),
                     const SizedBox(height: 8),
                     Text('Room ID: ${_connectionInfo.roomId}'),
-                    Text('Local Peer ID: ${_connectionInfo.localPeerId}'),
+                    Text('Local Peer ID: ${_connectionInfo.localPeerId.isEmpty ? "Not generated yet" : _connectionInfo.localPeerId}'),
                     Text(
                         'Connected Peers: ${_connectionInfo.connectedPeers.length}'),
                     const SizedBox(height: 16),

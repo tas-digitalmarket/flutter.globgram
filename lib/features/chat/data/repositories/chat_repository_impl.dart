@@ -1,5 +1,6 @@
 import 'package:uuid/uuid.dart';
-import '../../domain/entities/message.dart';
+import '../models/message_model.dart';
+import '../../../../core/models/message_types.dart';
 import '../datasources/local_data_source.dart';
 
 class ChatRepositoryImpl {
@@ -8,7 +9,7 @@ class ChatRepositoryImpl {
 
   ChatRepositoryImpl({required this.localDataSource});
 
-  Future<List<Message>> getMessages() async {
+  Future<List<MessageModel>> getMessages() async {
     try {
       return await localDataSource.getMessages();
     } catch (e) {
@@ -16,9 +17,9 @@ class ChatRepositoryImpl {
     }
   }
 
-  Future<Message> sendTextMessage(String content) async {
+  Future<MessageModel> sendTextMessage(String content) async {
     try {
-      final message = Message(
+      final message = MessageModel(
         id: _uuid.v4(),
         content: content,
         type: MessageType.text,
@@ -33,16 +34,16 @@ class ChatRepositoryImpl {
     }
   }
 
-  Future<Message> sendVoiceMessage(String filePath, Duration duration) async {
+  Future<MessageModel> sendVoiceMessage(String filePath, Duration duration) async {
     try {
-      final message = Message(
+      final message = MessageModel(
         id: _uuid.v4(),
         content: filePath,
         type: MessageType.voice,
         timestamp: DateTime.now(),
         isSent: true,
         voiceFilePath: filePath,
-        voiceDuration: duration,
+        voiceDurationInSeconds: duration.inSeconds,
       );
 
       await localDataSource.saveMessage(message);
@@ -52,7 +53,7 @@ class ChatRepositoryImpl {
     }
   }
 
-  Future<void> receiveMessage(Message message) async {
+  Future<void> receiveMessage(MessageModel message) async {
     try {
       final receivedMessage = message.copyWith(isSent: false);
       await localDataSource.saveMessage(receivedMessage);

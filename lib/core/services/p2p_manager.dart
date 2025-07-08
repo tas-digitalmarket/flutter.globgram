@@ -4,13 +4,13 @@ import 'package:flutter_webrtc/flutter_webrtc.dart';
 import '../models/p2p_models.dart';
 import '../utils/app_logger.dart';
 import 'modern_webrtc_service.dart';
-import 'broadcast_signaling_service.dart';
+import 'firebase_signaling_service.dart';
 
-/// P2P Manager with BroadcastChannel signaling for local testing and real WebRTC state management
-/// Removes fake "connected" simulation and relies only on actual connection states
+/// P2P Manager with Firebase signaling for real WebRTC state management
+/// Uses Firestore for signaling and WebRTC data channels for messaging
 class P2PManager {
   final ModernWebRTCService _webRTCService = ModernWebRTCService();
-  final BroadcastSignalingService _signalingService = BroadcastSignalingService();
+  final FirebaseSignalingService _signalingService = FirebaseSignalingService();
   final AppLogger _logger = AppLogger();
 
   P2PConnectionInfo _connectionInfo = const P2PConnectionInfo(
@@ -40,7 +40,7 @@ class P2PManager {
         connectionState: PeerConnectionState.connecting,
       ));
 
-      // Initialize BroadcastChannel signaling
+      // Initialize Firebase signaling
       _signalingService.initialize(roomId);
       _setupSignalingCallbacks();
       
@@ -51,6 +51,9 @@ class P2PManager {
       _updateConnectionInfo(_connectionInfo.copyWith(
         localPeerId: _signalingService.localPeerId ?? '',
       ));
+
+      _logger.success('🆔 Local Peer ID set to: ${_signalingService.localPeerId}');
+      _logger.debug('🔧 Connection info updated with localPeerId: ${_connectionInfo.localPeerId}');
 
       _logger.success('✅ Successfully joined room: $roomId');
     } catch (e) {
@@ -168,7 +171,18 @@ class P2PManager {
 
     _webRTCService.onIceCandidate = (RTCIceCandidate candidate) {
       if (_currentTargetPeer != null) {
-        _signalingService.sendIceCandidate(candidate, _currentTargetPeer!);
+        final signalingMessage = SignalingMessage(
+          type: 'ice_candidate',
+          from: _connectionInfo.localPeerId,
+          to: _currentTargetPeer!,
+          data: {
+            'candidate': candidate.candidate,
+            'sdpMLineIndex': candidate.sdpMLineIndex,
+            'sdpMid': candidate.sdpMid,
+          },
+          timestamp: DateTime.now(),
+        );
+        _signalingService.sendSignalingMessage(signalingMessage);
       }
     };
   }
@@ -209,7 +223,17 @@ class P2PManager {
       final answer = await _webRTCService.createAnswer();
       await _webRTCService.setLocalDescription(answer);
       
-      await _signalingService.sendAnswer(answer, message.from!);
+      final signalingMessage = SignalingMessage(
+        type: 'answer',
+        from: _connectionInfo.localPeerId,
+        to: message.from!,
+        data: {
+          'type': 'answer',
+          'sdp': answer.sdp,
+        },
+        timestamp: DateTime.now(),
+      );
+      _signalingService.sendSignalingMessage(signalingMessage);
       
       _logger.info('📤 Sent answer to ${message.from}');
     } catch (e) {
@@ -261,7 +285,17 @@ class P2PManager {
       final offer = await _webRTCService.createOffer();
       await _webRTCService.setLocalDescription(offer);
       
-      await _signalingService.sendOffer(offer, peerId);
+      final signalingMessage = SignalingMessage(
+        type: 'offer',
+        from: _connectionInfo.localPeerId,
+        to: peerId,
+        data: {
+          'type': 'offer',
+          'sdp': offer.sdp,
+        },
+        timestamp: DateTime.now(),
+      );
+      _signalingService.sendSignalingMessage(signalingMessage);
       
       _logger.info('📤 Sent offer to: $peerId');
     } catch (e) {
@@ -336,7 +370,7 @@ class P2PManager {
       _currentTargetPeer = null;
 
       await _webRTCService.disconnect();
-      await _signalingService.disconnect();
+      _signalingService.disconnect();
 
       _updateConnectionInfo(const P2PConnectionInfo(
         roomId: '',

@@ -1,50 +1,53 @@
-# Globgram P2P Chat Application
+# 🌍 Globgram P2P Chat Application
 
-A serverless peer-to-peer chat application built with Flutter and Firebase Firestore signaling. This application enables real-time messaging between users without requiring a custom backend server.
+A **serverless peer-to-peer chat application** built with Flutter and Firebase Firestore signaling. Enables real-time messaging between users without requiring a custom backend server.
 
-## Features
+## ✨ Features
 
 - 🔥 **Firebase Firestore Signaling**: Real-time signaling using Cloud Firestore
-- 🌐 **WebRTC P2P Communication**: Direct peer-to-peer messaging via data channels
-- 📱 **Cross-Platform**: Supports Android and Web (Chrome, Edge)
-- 🌍 **Multilingual**: English, Persian (Farsi), and Spanish support
+- 🌐 **WebRTC P2P Communication**: Direct peer-to-peer messaging via data channels  
+- 📱 **Cross-Platform**: Android and Web (Chrome, Edge, Firefox)
+- �️ **Voice Messages**: Record and send voice messages via WebRTC
+- �🌍 **Multilingual**: English, Persian (Farsi), and Spanish support
 - 🎯 **STUN/TURN Servers**: Configured for reliable connection establishment
 - 📡 **Offline-First**: Local message storage with Hive database
-- 🎨 **Modern UI**: Clean, responsive design with dark/light theme support
+- 🎨 **Modern UI**: Clean, responsive design with RTL support
+- 🔒 **No Backend**: Completely serverless P2P architecture
 
-## Architecture
+## 🏗️ Architecture
 
-- **Clean Architecture** with BLoC state management
+- **Clean Architecture** + **BLoC** state management
 - **Firebase Firestore** for signaling (offers, answers, ICE candidates)
 - **WebRTC** for direct peer-to-peer data channel communication
 - **Hive** for local message persistence
 - **Easy Localization** for internationalization
 
-## Prerequisites
+## 📋 Prerequisites
 
 1. **Flutter SDK** (>=3.10.0)
-2. **Firebase Project** with Firestore enabled
+2. **Firebase Project** with Firestore enabled  
 3. **FlutterFire CLI** for Firebase configuration
 
-## Setup Instructions
+## 🚀 Quick Start
 
 ### 1. Clone and Install Dependencies
 
 ```bash
 git clone <repository-url>
-cd globgram-p2p-chat
+cd globgramflutter01
 flutter pub get
 ```
 
-### 2. Firebase Configuration
+### 2. Firebase Setup (Required)
 
-#### Install FlutterFire CLI:
+See detailed setup: **[📋 FIREBASE_SETUP.md](./FIREBASE_SETUP.md)**
+
+**Quick version:**
 ```bash
+# Install FlutterFire CLI
 dart pub global activate flutterfire_cli
-```
 
-#### Configure Firebase:
-```bash
+# Configure Firebase (replaces lib/firebase_options.dart)
 flutterfire configure
 ```
 

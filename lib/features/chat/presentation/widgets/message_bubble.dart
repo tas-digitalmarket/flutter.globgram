@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
-import '../../domain/entities/message.dart';
+import '../../data/models/message_model.dart';
+import '../../../../core/models/message_types.dart';
 import 'package:intl/intl.dart';
 
 class MessageBubble extends StatelessWidget {
-  final Message message;
+  final MessageModel message;
 
   const MessageBubble({
     super.key,
