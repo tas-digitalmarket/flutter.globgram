@@ -201,7 +201,7 @@ class _P2PTestPageState extends State<P2PTestPage> {
 
   @override
   void dispose() {
-    _p2pManager.disconnect();
+    _p2pManager.dispose();
     _roomController.dispose();
     _messageController.dispose();
     super.dispose();

@@ -1,12 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:easy_localization/easy_localization.dart';
+// import 'package:firebase_core/firebase_core.dart';
 
+// import 'firebase_options.dart';
 import 'core/theme/app_theme.dart';
 import 'features/chat/presentation/pages/room_selection_page.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize Firebase - Disabled for BroadcastChannel testing
+  // await Firebase.initializeApp(
+  //   options: DefaultFirebaseOptions.currentPlatform,
+  // );
 
   // Initialize Easy Localization
   await EasyLocalization.ensureInitialized();
