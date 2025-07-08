@@ -1,65 +1,270 @@
 # 🌍 Globgram P2P Chat Application
 
-A **serverless peer-to-peer chat application** built with Flutter and Firebase Firestore signaling. Enables real-time messaging between users without requiring a custom backend server.
+A **true peer-to-peer chat application** built with Flutter, WebRTC, and Firebase Firestore signaling. Enables real-time encrypted messaging between users without storing any chat messages on servers.
 
 ## ✨ Features
 
-- 🔥 **Firebase Firestore Signaling**: Real-time WebRTC signaling using Cloud Firestore
-- 🌐 **WebRTC P2P Communication**: Direct peer-to-peer messaging via RTCDataChannel ONLY
-- 📱 **Cross-Platform**: Android and Web (Chrome, Edge, Firefox)
+- 🔥 **Firebase Firestore Signaling**: WebRTC handshake only (offers, answers, ICE candidates)
+- 💬 **Pure WebRTC Messaging**: ALL chat messages via encrypted RTCDataChannel
+- 🌐 **Cross-Platform**: Web (Chrome, Edge, Firefox) and Android 
 - 🎵 **Voice Messages**: Record and send voice messages via WebRTC data channels
 - 🌍 **Multilingual**: English, Persian (Farsi), and Spanish support
-- 🎯 **STUN/TURN Servers**: Configured for reliable connection establishment
+- 🎯 **STUN/TURN Servers**: Reliable connection with Google STUN + Metered TURN
 - 📡 **Offline-First**: Local message storage with Hive database
 - 🎨 **Modern UI**: Clean, responsive design with RTL support
-- 🔒 **No Backend**: Completely serverless P2P architecture - NO BroadcastChannel
+- 🔒 **Serverless**: Zero backend dependencies - true P2P architecture
+- 🚫 **No BroadcastChannel**: Completely removed deprecated signaling methods
 
 ## 🏗️ Architecture
 
-- **Clean Architecture** + **BLoC** state management
-- **Firebase Firestore** for WebRTC signaling ONLY (offers, answers, ICE candidates)
-- **WebRTC Data Channels** for ALL peer-to-peer messaging (text, voice, files)
-- **Hive** for local message persistence
-- **Easy Localization** for internationalization
-- **100% RTCDataChannel**: All messages sent through WebRTC data channels
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Globgram P2P Architecture                │
+│                     (Pure WebRTC + Firestore)              │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  ┌─────────────────┐    ┌─────────────────┐                │
+│  │   Browser A     │    │   Browser B     │                │
+│  │                 │    │                 │                │
+│  │ ┌─────────────┐ │    │ ┌─────────────┐ │                │
+│  │ │ Flutter App │ │    │ │ Flutter App │ │                │
+│  │ │             │ │    │ │             │ │                │
+│  │ │   WebRTC    │◄┼────┼─┤   WebRTC    │ │                │
+│  │ │ DataChannel │ │    │ │ DataChannel │ │                │
+│  │ │             │ │    │ │             │ │                │
+│  │ └─────────────┘ │    │ └─────────────┘ │                │
+│  │       │         │    │       │         │                │
+│  └───────┼─────────┘    └───────┼─────────┘                │
+│          │                      │                          │
+│          │                      │                          │
+│    ┌─────▼──────────────────────▼─────┐                    │
+│    │        Firestore Database        │                    │
+│    │                                  │                    │
+│    │  • WebRTC Signaling Only        │                    │
+│    │  • Offer/Answer Exchange        │                    │
+│    │  • ICE Candidate Exchange       │                    │
+│    │  • NO Chat Messages             │                    │
+│    │                                  │                    │
+│    └──────────────────────────────────┘                    │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Key Points:**
+- 📡 **Firestore** = WebRTC signaling ONLY (offers/answers/ICE)
+- 💬 **Chat Messages** = WebRTC DataChannel ONLY (end-to-end encrypted)
+- 🔒 **Privacy** = No chat messages stored on any server
+- ⚡ **Real-time** = Direct browser-to-browser communication
 
 ## 📋 Prerequisites
 
 1. **Flutter SDK** (>=3.10.0)
 2. **Firebase Project** with Firestore enabled  
 3. **FlutterFire CLI** for Firebase configuration
+4. **HTTPS domain** for Web deployment (required for WebRTC)
 
 ## 🚀 Quick Start
 
 ### 1. Clone and Install Dependencies
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/tas-digitalmarket/flutter.globgram
 cd globgramflutter01
 flutter pub get
 ```
 
 ### 2. Firebase Setup (Required)
 
-See detailed setup: **[📋 FIREBASE_SETUP.md](./FIREBASE_SETUP.md)**
+#### Step 1: Create Firebase Project
+1. Go to [Firebase Console](https://console.firebase.google.com/)
+2. Create new project named "globgram-p2p"
+3. Enable Firestore Database in **test mode**
 
-**Quick version:**
+#### Step 2: Configure Flutter Project
 ```bash
 # Install FlutterFire CLI
 dart pub global activate flutterfire_cli
 
-# Configure Firebase (replaces lib/firebase_options.dart)
+# Configure Firebase for your project
 flutterfire configure
 ```
 
-This will:
-- Create a new Firebase project (or select existing)
-- Enable required services (Firestore)
-- Generate `lib/firebase_options.dart`
+#### Step 3: Replace Firebase Options
+- Copy the generated `firebase_options.dart` 
+- Replace `lib/firebase_options.dart` in this project
 
-#### Enable Firestore:
-1. Go to [Firebase Console](https://console.firebase.google.com)
-2. Select your project
+#### Step 4: Setup Firestore Security Rules
+In Firebase Console → Firestore → Rules:
+```javascript
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /rooms/{roomId} {
+      allow read, write: if true; // Change for production
+      
+      match /candidates/{candidateType}/list/{candidateId} {
+        allow read, write: if true;
+      }
+    }
+  }
+}
+```
+
+### 3. Build and Run
+
+#### Web (Development)
+```bash
+flutter run -d chrome --web-port 8080
+```
+
+#### Web (Production Build)
+```bash
+flutter build web --release
+```
+
+#### Android (Debug)
+```bash
+flutter run -d android
+```
+
+#### Android (Release APK)
+```bash
+flutter build apk --release
+```
+
+## 🎮 How to Use
+
+### Creating a Room
+1. Open the app
+2. Click **"Create Room"**
+3. Share the generated **Room ID** or **QR Code** with your peer
+4. Wait for connection (status shows "Connected")
+
+### Joining a Room
+1. Open the app on another device/browser
+2. Click **"Join Room"**
+3. Enter the **Room ID** received from peer
+4. Wait for connection establishment
+
+### Messaging
+- Once **connectionState = connected**, start chatting
+- All messages are sent via **encrypted WebRTC DataChannel**
+- Messages are **NOT stored** on any server
+- Real-time delivery between connected peers
+
+## 🌐 Web Deployment
+
+### GitHub Pages (Recommended)
+1. Build for production:
+   ```bash
+   flutter build web --release
+   ```
+
+2. Deploy to GitHub Pages:
+   ```bash
+   # Copy build/web contents to gh-pages branch
+   cp -r build/web/* docs/
+   git add docs/
+   git commit -m "Deploy to GitHub Pages"
+   git push origin main
+   ```
+
+3. Enable GitHub Pages in repository settings
+4. Use **Custom Domain** with HTTPS (required for WebRTC)
+
+### Firebase Hosting
+```bash
+npm install -g firebase-tools
+firebase login
+firebase init hosting
+firebase deploy
+```
+
+### Netlify/Vercel
+- Upload `build/web` folder
+- Ensure HTTPS is enabled
+- Configure redirects for Flutter routes
+
+## 🧪 Testing Multi-Device Connection
+
+1. **Build and serve:**
+   ```bash
+   flutter build web --release
+   cd build/web
+   python -m http.server 8080
+   ```
+
+2. **Test setup:**
+   - Browser A: `http://localhost:8080` → Create Room
+   - Browser B: `http://localhost:8080` (incognito) → Join Room
+   - Mobile: Use same local IP address
+
+3. **Verify connection:**
+   - Check **connectionState = connected** 
+   - Send test messages both ways
+   - Confirm real-time delivery
+
+## 🔧 Configuration
+
+### STUN/TURN Servers
+```dart
+final iceServers = [
+  {'urls': 'stun:stun.l.google.com:19302'},
+  {
+    'urls': 'turn:relay.metered.ca:80',
+    'username': 'webrtc',
+    'credential': 'webrtc'
+  },
+];
+```
+
+**Note:** For production, replace with your own TURN servers for better reliability.
+
+## 📚 Documentation
+
+- **[📋 FIREBASE_SETUP.md](./FIREBASE_SETUP.md)** - Detailed Firebase configuration
+- **[🎯 STAGE_C_COMPLETION.md](./STAGE_C_COMPLETION.md)** - Pure WebRTC implementation notes
+- **[🧪 Testing Guides](./P2P_TEST_GUIDE.md)** - Multi-device testing procedures
+
+## 🛠️ Tech Stack
+
+- **Flutter** - Cross-platform framework
+- **WebRTC** - Peer-to-peer communication (RTCDataChannel for ALL messaging)
+- **Firebase Firestore** - WebRTC signaling only
+- **BLoC** - State management
+- **Hive** - Local storage
+- **Easy Localization** - Multi-language support
+
+## 🏆 Development Status
+
+- ✅ **Stage A**: Firebase Firestore signaling implementation
+- ✅ **Stage B**: WebRTC wiring and method alignment  
+- ✅ **Stage C**: Pure WebRTC messaging (BroadcastChannel removed)
+- ✅ **Stage D**: STUN/TURN configuration and documentation
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create feature branch (`git checkout -b feature/AmazingFeature`)
+3. Commit changes (`git commit -m 'Add AmazingFeature'`)
+4. Push to branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🙏 Acknowledgments
+
+- Flutter team for the excellent WebRTC plugin
+- Firebase for real-time database capabilities
+- Metered.ca for free TURN server testing
+
+---
+
+**🚀 Ready to build true peer-to-peer chat applications!**
+
+*No servers, no data collection, just pure P2P communication.* 🔒
 3. Navigate to Firestore Database
 4. Click "Create database"
 5. Choose "Start in test mode" (for development)

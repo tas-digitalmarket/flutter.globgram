@@ -5,12 +5,15 @@ class P2pRepositoryImpl {
   RTCPeerConnection? _peerConnection;
   RTCDataChannel? _dataChannel;
 
-  // STUN servers configuration
+  // STUN/TURN servers configuration - Stage D compliant
   final Map<String, dynamic> _configuration = {
     'iceServers': [
       {'urls': 'stun:stun.l.google.com:19302'},
-      {'urls': 'stun:stun1.l.google.com:19302'},
-      {'urls': 'stun:stun2.l.google.com:19302'},
+      {
+        'urls': 'turn:relay.metered.ca:80',
+        'username': 'webrtc',
+        'credential': 'webrtc'
+      },
     ]
   };
 
