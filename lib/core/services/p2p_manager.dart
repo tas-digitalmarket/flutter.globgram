@@ -4,13 +4,13 @@ import 'package:flutter_webrtc/flutter_webrtc.dart';
 import '../models/p2p_models.dart';
 import '../utils/app_logger.dart';
 import 'modern_webrtc_service.dart';
-import 'firebase_signaling_service.dart';
+import 'firestore_signaling_service.dart';
 
-/// P2P Manager with Firebase signaling for real WebRTC state management
+/// P2P Manager with Firestore signaling for real WebRTC state management
 /// Uses Firestore for signaling and WebRTC data channels for messaging
 class P2PManager {
   final ModernWebRTCService _webRTCService = ModernWebRTCService();
-  final FirebaseSignalingService _signalingService = FirebaseSignalingService();
+  final FirestoreSignalingService _signalingService = FirestoreSignalingService();
   final AppLogger _logger = AppLogger();
 
   P2PConnectionInfo _connectionInfo = const P2PConnectionInfo(
@@ -40,8 +40,8 @@ class P2PManager {
         connectionState: PeerConnectionState.connecting,
       ));
 
-      // Initialize Firebase signaling
-      _signalingService.initialize(roomId);
+      // Join room via Firestore signaling
+      await _signalingService.joinRoom(roomId);
       _setupSignalingCallbacks();
       
       // Initialize WebRTC with STUN/TURN servers
@@ -49,15 +49,44 @@ class P2PManager {
       _setupWebRTCCallbacks();
 
       _updateConnectionInfo(_connectionInfo.copyWith(
-        localPeerId: _signalingService.localPeerId ?? '',
+        localPeerId: 'peer_${DateTime.now().millisecondsSinceEpoch}',
       ));
-
-      _logger.success('🆔 Local Peer ID set to: ${_signalingService.localPeerId}');
-      _logger.debug('🔧 Connection info updated with localPeerId: ${_connectionInfo.localPeerId}');
 
       _logger.success('✅ Successfully joined room: $roomId');
     } catch (e) {
       _handleError('Failed to join room: $e');
+    }
+  }
+
+  /// Create a room and initialize P2P connections
+  Future<String> createRoom() async {
+    try {
+      _logger.info('🏠 Creating room');
+
+      // Create room via Firestore signaling
+      final roomId = await _signalingService.createRoom();
+      _isOfferingPeer = true;
+      
+      _updateConnectionInfo(_connectionInfo.copyWith(
+        roomId: roomId,
+        connectionState: PeerConnectionState.connecting,
+      ));
+
+      _setupSignalingCallbacks();
+      
+      // Initialize WebRTC with STUN/TURN servers
+      await _initializeWebRTC();
+      _setupWebRTCCallbacks();
+
+      _updateConnectionInfo(_connectionInfo.copyWith(
+        localPeerId: 'peer_${DateTime.now().millisecondsSinceEpoch}',
+      ));
+
+      _logger.success('✅ Successfully created room: $roomId');
+      return roomId;
+    } catch (e) {
+      _handleError('Failed to create room: $e');
+      rethrow;
     }
   }
 
@@ -79,37 +108,47 @@ class P2PManager {
     await _webRTCService.initialize(configuration);
   }
 
-  /// Set up Firebase signaling callbacks
+  /// Set up Firestore signaling callbacks
   void _setupSignalingCallbacks() {
-    _signalingService.onMessage = (SignalingMessage message) {
-      _handleSignalingMessage(message);
+    _signalingService.onRemoteOffer = (RTCSessionDescription offer) async {
+      _logger.info('📥 Received remote offer');
+      await _webRTCService.setRemoteDescription(offer);
+      
+      // Create data channel for answering peer
+      await _createDataChannel();
+      
+      // Create and send answer
+      final answer = await _webRTCService.createAnswer();
+      await _webRTCService.setLocalDescription(answer);
+      await _signalingService.sendAnswer(answer);
     };
 
-    _signalingService.onPeerJoined = (PeerInfo peer) {
-      _logger.success('👥 Peer joined: ${peer.id}');
-      
-      // Update peer list without changing connection state
-      _updateConnectionInfo(_connectionInfo.copyWith(
-        connectedPeers: [..._connectionInfo.connectedPeers, peer],
-      ));
+    _signalingService.onRemoteAnswer = (RTCSessionDescription answer) async {
+      _logger.info('📩 Received remote answer');
+      await _webRTCService.setRemoteDescription(answer);
+    };
 
-      // Only initiate connection if we don't have one and this is a new peer
-      if (_currentTargetPeer == null) {
-        _initiateConnection(peer.id);
+    _signalingService.onRemoteIceCandidate = (RTCIceCandidate candidate) async {
+      _logger.info('🧊 Received remote ICE candidate');
+      await _webRTCService.addIceCandidate(candidate);
+    };
+
+    _signalingService.onPeerJoined = (String peerId) {
+      _logger.success('👥 Peer joined: $peerId');
+      
+      // Only initiate connection if we don't have one and we are offering peer
+      if (_currentTargetPeer == null && _isOfferingPeer) {
+        _initiateConnection(peerId);
       }
     };
 
     _signalingService.onPeerLeft = (String peerId) {
       _logger.info('👋 Peer left: $peerId');
-      
-      _updateConnectionInfo(_connectionInfo.copyWith(
-        connectedPeers: _connectionInfo.connectedPeers
-            .where((p) => p.id != peerId)
-            .toList(),
-      ));
-
       if (_currentTargetPeer == peerId) {
-        _handlePeerDisconnection();
+        _currentTargetPeer = null;
+        _updateConnectionInfo(_connectionInfo.copyWith(
+          connectionState: PeerConnectionState.disconnected,
+        ));
       }
     };
 
@@ -150,18 +189,16 @@ class P2PManager {
     _webRTCService.onDataChannelMessage = (String message) {
       try {
         final messageData = json.decode(message) as Map<String, dynamic>;
-        final type = messageData['type'] as String;
         
-        if (type == 'chat') {
+        if (messageData['type'] == 'chat') {
           final content = messageData['content'] as String;
           final fromPeerId = messageData['from'] as String;
           final timestamp = DateTime.parse(messageData['timestamp'] as String);
           
-          _logger.success('💬 Received chat message: "$content" from $fromPeerId');
           onMessageReceived?.call(content, fromPeerId, timestamp);
         }
       } catch (e) {
-        _logger.error('❌ Failed to parse data channel message: $e');
+        _logger.error('❌ Failed to parse message: $e');
       }
     };
 
@@ -169,108 +206,10 @@ class P2PManager {
       _logger.success('📡 Data channel opened - ready for messaging');
     };
 
-    _webRTCService.onIceCandidate = (RTCIceCandidate candidate) {
-      if (_currentTargetPeer != null) {
-        final signalingMessage = SignalingMessage(
-          type: 'ice_candidate',
-          from: _connectionInfo.localPeerId,
-          to: _currentTargetPeer!,
-          data: {
-            'candidate': candidate.candidate,
-            'sdpMLineIndex': candidate.sdpMLineIndex,
-            'sdpMid': candidate.sdpMid,
-          },
-          timestamp: DateTime.now(),
-        );
-        _signalingService.sendSignalingMessage(signalingMessage);
-      }
+    _webRTCService.onIceCandidate = (RTCIceCandidate candidate) async {
+      _logger.info('🧊 Sending ICE candidate');
+      await _signalingService.sendIceCandidate(candidate);
     };
-  }
-
-  /// Handle incoming signaling messages
-  Future<void> _handleSignalingMessage(SignalingMessage message) async {
-    _logger.debug('📨 Handling signaling: ${message.type} from ${message.from}');
-
-    switch (message.type) {
-      case 'offer':
-        await _handleOffer(message);
-        break;
-      case 'answer':
-        await _handleAnswer(message);
-        break;
-      case 'ice_candidate':
-        await _handleIceCandidate(message);
-        break;
-      default:
-        _logger.warning('⚠️ Unknown signaling message type: ${message.type}');
-    }
-  }
-
-  /// Handle incoming offer
-  Future<void> _handleOffer(SignalingMessage message) async {
-    try {
-      _currentTargetPeer = message.from;
-      _isOfferingPeer = false;
-
-      final offer = RTCSessionDescription(
-        message.data['sdp'] as String,
-        message.data['type'] as String,
-      );
-
-      await _webRTCService.setRemoteDescription(offer);
-      await _createDataChannel();
-      
-      final answer = await _webRTCService.createAnswer();
-      await _webRTCService.setLocalDescription(answer);
-      
-      final signalingMessage = SignalingMessage(
-        type: 'answer',
-        from: _connectionInfo.localPeerId,
-        to: message.from!,
-        data: {
-          'type': 'answer',
-          'sdp': answer.sdp,
-        },
-        timestamp: DateTime.now(),
-      );
-      _signalingService.sendSignalingMessage(signalingMessage);
-      
-      _logger.info('📤 Sent answer to ${message.from}');
-    } catch (e) {
-      _logger.error('❌ Failed to handle offer: $e');
-    }
-  }
-
-  /// Handle incoming answer
-  Future<void> _handleAnswer(SignalingMessage message) async {
-    try {
-      final answer = RTCSessionDescription(
-        message.data['sdp'] as String,
-        message.data['type'] as String,
-      );
-
-      await _webRTCService.setRemoteDescription(answer);
-      _logger.info('✅ Processed answer from ${message.from}');
-    } catch (e) {
-      _logger.error('❌ Failed to handle answer: $e');
-    }
-  }
-
-  /// Handle incoming ICE candidate
-  Future<void> _handleIceCandidate(SignalingMessage message) async {
-    try {
-      final candidateData = message.data['candidate'] as Map<String, dynamic>;
-      final candidate = RTCIceCandidate(
-        candidateData['candidate'] as String,
-        candidateData['sdpMid'] as String?,
-        candidateData['sdpMLineIndex'] as int?,
-      );
-
-      await _webRTCService.addIceCandidate(candidate);
-      _logger.debug('🧊 Added ICE candidate from ${message.from}');
-    } catch (e) {
-      _logger.error('❌ Failed to handle ICE candidate: $e');
-    }
   }
 
   /// Initiate connection to a peer
@@ -285,17 +224,7 @@ class P2PManager {
       final offer = await _webRTCService.createOffer();
       await _webRTCService.setLocalDescription(offer);
       
-      final signalingMessage = SignalingMessage(
-        type: 'offer',
-        from: _connectionInfo.localPeerId,
-        to: peerId,
-        data: {
-          'type': 'offer',
-          'sdp': offer.sdp,
-        },
-        timestamp: DateTime.now(),
-      );
-      _signalingService.sendSignalingMessage(signalingMessage);
+      await _signalingService.sendOffer(offer);
       
       _logger.info('📤 Sent offer to: $peerId');
     } catch (e) {
@@ -315,17 +244,6 @@ class P2PManager {
         _webRTCService.onDataChannelMessage?.call(message.text);
       };
     }
-  }
-
-  /// Handle peer disconnection
-  void _handlePeerDisconnection() {
-    _currentTargetPeer = null;
-    _dataChannel?.close();
-    _dataChannel = null;
-    
-    _updateConnectionInfo(_connectionInfo.copyWith(
-      connectionState: PeerConnectionState.disconnected,
-    ));
   }
 
   /// Send a chat message through the data channel

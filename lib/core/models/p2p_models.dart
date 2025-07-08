@@ -55,45 +55,6 @@ class PeerInfo extends Equatable {
   List<Object?> get props => [id, name, connectedAt, isConnected, lastSeen];
 }
 
-class SignalingMessage extends Equatable {
-  final String type;
-  final String? from;
-  final String? to;
-  final Map<String, dynamic> data;
-  final DateTime timestamp;
-
-  const SignalingMessage({
-    required this.type,
-    this.from,
-    this.to,
-    required this.data,
-    required this.timestamp,
-  });
-
-  factory SignalingMessage.fromJson(Map<String, dynamic> json) {
-    return SignalingMessage(
-      type: json['type'] as String,
-      from: json['from'] as String?,
-      to: json['to'] as String?,
-      data: json['data'] as Map<String, dynamic>,
-      timestamp: DateTime.parse(json['timestamp'] as String),
-    );
-  }
-
-  Map<String, dynamic> toJson() {
-    return {
-      'type': type,
-      'from': from,
-      'to': to,
-      'data': data,
-      'timestamp': timestamp.toIso8601String(),
-    };
-  }
-
-  @override
-  List<Object?> get props => [type, from, to, data, timestamp];
-}
-
 class P2PConnectionInfo extends Equatable {
   final String roomId;
   final String localPeerId;

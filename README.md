@@ -4,11 +4,11 @@ A **serverless peer-to-peer chat application** built with Flutter and Firebase F
 
 ## ✨ Features
 
-- 🔥 **Firebase Firestore Signaling**: Real-time signaling using Cloud Firestore
+- 🔥 **Firebase Firestore Signaling**: Real-time WebRTC signaling using Cloud Firestore
 - 🌐 **WebRTC P2P Communication**: Direct peer-to-peer messaging via data channels  
 - 📱 **Cross-Platform**: Android and Web (Chrome, Edge, Firefox)
-- �️ **Voice Messages**: Record and send voice messages via WebRTC
-- �🌍 **Multilingual**: English, Persian (Farsi), and Spanish support
+- 🎵 **Voice Messages**: Record and send voice messages via WebRTC
+- 🌍 **Multilingual**: English, Persian (Farsi), and Spanish support
 - 🎯 **STUN/TURN Servers**: Configured for reliable connection establishment
 - 📡 **Offline-First**: Local message storage with Hive database
 - 🎨 **Modern UI**: Clean, responsive design with RTL support
@@ -17,8 +17,8 @@ A **serverless peer-to-peer chat application** built with Flutter and Firebase F
 ## 🏗️ Architecture
 
 - **Clean Architecture** + **BLoC** state management
-- **Firebase Firestore** for signaling (offers, answers, ICE candidates)
-- **WebRTC** for direct peer-to-peer data channel communication
+- **Firebase Firestore** for WebRTC signaling (offers, answers, ICE candidates)
+- **WebRTC Data Channels** for direct peer-to-peer messaging
 - **Hive** for local message persistence
 - **Easy Localization** for internationalization
 
