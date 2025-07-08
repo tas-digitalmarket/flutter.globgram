@@ -44,6 +44,9 @@ class P2PManager {
       await _signalingService.joinRoom(roomId);
       _setupSignalingCallbacks();
       
+      // Start listening for remote candidates
+      _signalingService.listenForRemoteCandidates();
+      
       // Initialize WebRTC with STUN/TURN servers
       await _initializeWebRTC();
       _setupWebRTCCallbacks();
@@ -73,6 +76,9 @@ class P2PManager {
       ));
 
       _setupSignalingCallbacks();
+      
+      // Start listening for remote candidates
+      _signalingService.listenForRemoteCandidates();
       
       // Initialize WebRTC with STUN/TURN servers
       await _initializeWebRTC();
@@ -236,14 +242,13 @@ class P2PManager {
   /// Create data channel for chat messages
   Future<void> _createDataChannel() async {
     if (_isOfferingPeer) {
+      // Offering peer creates the data channel
       _dataChannel = await _webRTCService.createDataChannel('chat', {
         'ordered': true,
       });
-      
-      _dataChannel!.onMessage = (RTCDataChannelMessage message) {
-        _webRTCService.onDataChannelMessage?.call(message.text);
-      };
+      _logger.info('📡 Data channel created by offering peer');
     }
+    // Answering peer will receive data channel automatically via ModernWebRTCService callbacks
   }
 
   /// Send a chat message through the data channel
