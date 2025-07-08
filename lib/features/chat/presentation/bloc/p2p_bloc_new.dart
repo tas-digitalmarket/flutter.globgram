@@ -41,6 +41,7 @@ class MessageReceived extends P2PEvent {
   final String message;
   final String fromPeerId;
   final DateTime timestamp;
+
   const MessageReceived(this.message, this.fromPeerId, this.timestamp);
   @override
   List<Object?> get props => [message, fromPeerId, timestamp];
@@ -54,7 +55,10 @@ class P2PState extends Equatable {
   final bool isLoading;
 
   const P2PState({
-    this.connectionInfo = const P2PConnectionInfo(roomId: '', localPeerId: ''),
+    this.connectionInfo = const P2PConnectionInfo(
+      roomId: '',
+      localPeerId: '',
+    ),
     this.messages = const [],
     this.errorMessage,
     this.isLoading = false,
@@ -98,7 +102,7 @@ class P2PMessage extends Equatable {
   List<Object?> get props => [id, content, fromPeerId, timestamp, isLocal];
 }
 
-// BLoC Implementation
+// BLoC
 class P2PBloc extends Bloc<P2PEvent, P2PState> {
   final P2PManager _p2pManager = P2PManager();
 
@@ -109,16 +113,25 @@ class P2PBloc extends Bloc<P2PEvent, P2PState> {
     on<LeaveRoom>(_onLeaveRoom);
     on<P2PConnectionChanged>(_onConnectionChanged);
     on<MessageReceived>(_onMessageReceived);
+
     _setupP2PCallbacks();
   }
 
   void _setupP2PCallbacks() {
-    _p2pManager.onConnectionInfoChanged =
-        (info) => add(P2PConnectionChanged(info));
-    _p2pManager.onMessageReceived = (message, fromPeerId, timestamp) =>
-        add(MessageReceived(message, fromPeerId, timestamp));
-    _p2pManager.onError =
-        (error) => add(P2PConnectionChanged(state.connectionInfo));
+    _p2pManager.onConnectionInfoChanged = (P2PConnectionInfo info) {
+      add(P2PConnectionChanged(info));
+    };
+
+    _p2pManager.onMessageReceived =
+        (String message, String fromPeerId, DateTime timestamp) {
+      add(MessageReceived(message, fromPeerId, timestamp));
+    };
+
+    _p2pManager.onError = (String error) {
+      add(P2PConnectionChanged(state.connectionInfo.copyWith(
+          // Add error handling in connection state changes
+          )));
+    };
   }
 
   Future<void> _onCreateRoom(CreateRoom event, Emitter<P2PState> emit) async {
@@ -131,7 +144,9 @@ class P2PBloc extends Bloc<P2PEvent, P2PState> {
       ));
     } catch (e) {
       emit(state.copyWith(
-          isLoading: false, errorMessage: 'Failed to create room: $e'));
+        isLoading: false,
+        errorMessage: 'Failed to create room: $e',
+      ));
     }
   }
 
@@ -142,13 +157,17 @@ class P2PBloc extends Bloc<P2PEvent, P2PState> {
       emit(state.copyWith(isLoading: false));
     } catch (e) {
       emit(state.copyWith(
-          isLoading: false, errorMessage: 'Failed to join room: $e'));
+        isLoading: false,
+        errorMessage: 'Failed to join room: $e',
+      ));
     }
   }
 
   void _onSendMessage(SendMessage event, Emitter<P2PState> emit) {
     try {
       _p2pManager.sendMessage(event.message);
+
+      // Add local message to state
       final localMessage = P2PMessage(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
         content: event.message,
@@ -156,24 +175,32 @@ class P2PBloc extends Bloc<P2PEvent, P2PState> {
         timestamp: DateTime.now(),
         isLocal: true,
       );
-      emit(state.copyWith(messages: [...state.messages, localMessage]));
+
+      emit(state.copyWith(
+        messages: [...state.messages, localMessage],
+      ));
     } catch (e) {
-      emit(state.copyWith(errorMessage: 'Failed to send message: $e'));
+      emit(state.copyWith(
+        errorMessage: 'Failed to send message: $e',
+      ));
     }
   }
 
   Future<void> _onLeaveRoom(LeaveRoom event, Emitter<P2PState> emit) async {
     try {
-      emit(state.copyWith(isLoading: true));
       await _p2pManager.leaveRoom();
       emit(state.copyWith(
-        isLoading: false,
-        connectionInfo: const P2PConnectionInfo(roomId: '', localPeerId: ''),
-        messages: [],
+        connectionInfo: const P2PConnectionInfo(
+          roomId: '',
+          localPeerId: '',
+        ),
+        messages: const [],
+        errorMessage: null,
       ));
     } catch (e) {
       emit(state.copyWith(
-          isLoading: false, errorMessage: 'Failed to leave room: $e'));
+        errorMessage: 'Failed to leave room: $e',
+      ));
     }
   }
 
@@ -190,7 +217,10 @@ class P2PBloc extends Bloc<P2PEvent, P2PState> {
       timestamp: event.timestamp,
       isLocal: false,
     );
-    emit(state.copyWith(messages: [...state.messages, message]));
+
+    emit(state.copyWith(
+      messages: [...state.messages, message],
+    ));
   }
 
   @override

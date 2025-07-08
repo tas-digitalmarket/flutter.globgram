@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:easy_localization/easy_localization.dart';
-import '../bloc/p2p_bloc.dart';
+import '../bloc/bloc_exports.dart';
 import '../../../../core/models/p2p_models.dart';
 import '../../../../core/utils/app_logger.dart';
 import '../../../settings/presentation/pages/settings_page_simple.dart';
@@ -21,12 +21,12 @@ class P2PChatPage extends StatefulWidget {
 
 class _P2PChatPageState extends State<P2PChatPage> {
   final TextEditingController _messageController = TextEditingController();
-  late P2PBloc _p2pBloc;
+  late P2PBlocFixed _p2pBloc;
 
   @override
   void initState() {
     super.initState();
-    _p2pBloc = P2PBloc();
+    _p2pBloc = P2PBlocFixed();
     _p2pBloc.add(JoinRoom(widget.roomId));
   }
 
@@ -60,7 +60,7 @@ class _P2PChatPageState extends State<P2PChatPage> {
               tooltip: 'Test Connection',
             ),
             // Connection Status
-            BlocBuilder<P2PBloc, P2PState>(
+            BlocBuilder<P2PBlocFixed, P2PState>(
               builder: (context, state) {
                 return IconButton(
                   icon: Icon(
@@ -86,7 +86,7 @@ class _P2PChatPageState extends State<P2PChatPage> {
         body: Column(
           children: [
             // Connection Status Bar
-            BlocBuilder<P2PBloc, P2PState>(
+            BlocBuilder<P2PBlocFixed, P2PState>(
               builder: (context, state) {
                 return _buildConnectionStatusBar(state.connectionInfo);
               },
@@ -94,7 +94,7 @@ class _P2PChatPageState extends State<P2PChatPage> {
 
             // Messages List
             Expanded(
-              child: BlocBuilder<P2PBloc, P2PState>(
+              child: BlocBuilder<P2PBlocFixed, P2PState>(
                 builder: (context, state) {
                   if (state.messages.isEmpty) {
                     return _buildEmptyState();
@@ -217,7 +217,7 @@ class _P2PChatPageState extends State<P2PChatPage> {
   }
 
   Widget _buildEmptyState() {
-    return BlocBuilder<P2PBloc, P2PState>(
+    return BlocBuilder<P2PBlocFixed, P2PState>(
       builder: (context, state) {
         return Center(
           child: Column(
@@ -403,7 +403,7 @@ class _P2PChatPageState extends State<P2PChatPage> {
           const SizedBox(width: 12),
 
           // Send button
-          BlocBuilder<P2PBloc, P2PState>(
+          BlocBuilder<P2PBlocFixed, P2PState>(
             builder: (context, state) {
               final isConnected = state.connectionInfo.connectionState ==
                   PeerConnectionState.connected;

@@ -1,334 +1,287 @@
 import 'dart:async';
+import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import '../utils/app_logger.dart';
 
-/// Firestore-based signaling service for WebRTC peer-to-peer communication
-/// Collection schema:
-/// - rooms/{roomId} → offer, answer, createdBy, createdAt
-/// - rooms/{roomId}/candidates/local/{autoId}
-/// - rooms/{roomId}/candidates/remote/{autoId}
+/// Firestore-based signaling service for P2P WebRTC connections
+/// Schema implementation:
+/// rooms/{roomId}
+///   offer        (Map)
+///   answer       (Map)
+///   createdBy    (String uid)
+///   createdAt    (Timestamp)
+///   status       (String: 'waiting' | 'connected' | 'closed')
+///   candidates/
+///       caller/{autoId}   (Map)
+///       callee/{autoId}   (Map)
 class FirestoreSignalingService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final AppLogger _logger = AppLogger();
   
-  String? _roomId;
-  String? _localPeerId;
-  bool _isOfferingPeer = false;
-  
-  // Firestore listeners
-  StreamSubscription<DocumentSnapshot>? _roomListener;
-  StreamSubscription<QuerySnapshot>? _localCandidatesListener;
-  StreamSubscription<QuerySnapshot>? _remoteCandidatesListener;
-  
-  // Callbacks
-  Function(RTCSessionDescription)? onRemoteOffer;
-  Function(RTCSessionDescription)? onRemoteAnswer;
-  Function(RTCIceCandidate)? onRemoteIceCandidate;
-  Function(String)? onPeerJoined;
-  Function(String)? onPeerLeft;
-  Function(String)? onError;
+  // Generate unique user ID for room creator tracking
+  String get _currentUserId => 'user_${Random().nextInt(999999).toString().padLeft(6, '0')}';
 
-  /// Create a new room and become the offering peer
-  Future<String> createRoom() async {
+  /// Create a new room with proper schema and store the offer
+  /// Returns the generated room ID
+  Future<String> createRoom(RTCSessionDescription offer) async {
     try {
-      _roomId = _generateRoomId();
-      _localPeerId = _generatePeerId();
-      _isOfferingPeer = true;
+      _logger.info('🏠 Creating Firestore room with enhanced schema');
       
-      _logger.info('🏠 Creating room: $_roomId');
+      final roomRef = _firestore.collection('rooms').doc();
+      final roomId = roomRef.id;
+      final currentUserId = _currentUserId;
       
-      // Create room document
-      await _firestore.collection('rooms').doc(_roomId).set({
-        'createdBy': _localPeerId,
-        'createdAt': FieldValue.serverTimestamp(),
-        'status': 'waiting',
-      });
-      
-      // Setup listeners
-      _setupRoomListener();
-      _setupCandidatesListeners();
-      
-      _logger.success('✅ Room created: $_roomId');
-      return _roomId!;
-    } catch (e) {
-      _logger.error('❌ Failed to create room: $e');
-      onError?.call('Failed to create room: $e');
-      rethrow;
-    }
-  }
-
-  /// Join an existing room and become the answering peer
-  Future<void> joinRoom(String roomId) async {
-    try {
-      _roomId = roomId;
-      _localPeerId = _generatePeerId();
-      _isOfferingPeer = false;
-      
-      _logger.info('🚪 Joining room: $roomId');
-      
-      // Check if room exists
-      final roomDoc = await _firestore.collection('rooms').doc(roomId).get();
-      if (!roomDoc.exists) {
-        throw Exception('Room does not exist');
-      }
-      
-      // Update room status
-      await _firestore.collection('rooms').doc(roomId).update({
-        'answererPeerId': _localPeerId,
-        'status': 'connected',
-        'joinedAt': FieldValue.serverTimestamp(),
-      });
-      
-      // Setup listeners
-      _setupRoomListener();
-      _setupCandidatesListeners();
-      
-      _logger.success('✅ Joined room: $roomId');
-      onPeerJoined?.call(_localPeerId!);
-    } catch (e) {
-      _logger.error('❌ Failed to join room: $e');
-      onError?.call('Failed to join room: $e');
-      rethrow;
-    }
-  }
-
-  /// Send offer to remote peer
-  Future<void> sendOffer(RTCSessionDescription offer) async {
-    try {
-      if (_roomId == null) throw Exception('Room not initialized');
-      
-      _logger.info('📤 Sending offer');
-      
-      await _firestore.collection('rooms').doc(_roomId).update({
+      // Main room document with full schema
+      await roomRef.set({
         'offer': {
           'sdp': offer.sdp,
           'type': offer.type,
         },
-        'offerSentAt': FieldValue.serverTimestamp(),
+        'createdBy': currentUserId,
+        'createdAt': FieldValue.serverTimestamp(),
+        'status': 'waiting_for_answer',
+        'participants': {
+          'caller': currentUserId,
+          'callee': null,
+        }
       });
       
-      _logger.success('✅ Offer sent');
+      // Create candidates subcollection structure
+      final candidatesRef = roomRef.collection('candidates');
+      
+      // Initialize caller candidates collection
+      await candidatesRef.doc('caller').collection('list').doc('_init').set({
+        'initialized': true,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+      
+      // Initialize callee candidates collection  
+      await candidatesRef.doc('callee').collection('list').doc('_init').set({
+        'initialized': true,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+      
+      _logger.success('✅ Room created successfully with schema: $roomId');
+      return roomId;
     } catch (e) {
-      _logger.error('❌ Failed to send offer: $e');
-      onError?.call('Failed to send offer: $e');
+      _logger.error('❌ Failed to create room: $e');
       rethrow;
     }
   }
 
-  /// Send answer to remote peer
-  Future<void> sendAnswer(RTCSessionDescription answer) async {
+  /// Join an existing room by setting the answer and updating participant info
+  Future<void> joinRoom(String roomId, RTCSessionDescription answer) async {
     try {
-      if (_roomId == null) throw Exception('Room not initialized');
+      _logger.info('🚪 Joining room $roomId with enhanced schema');
       
-      _logger.info('📤 Sending answer');
+      final roomRef = _firestore.collection('rooms').doc(roomId);
+      final currentUserId = _currentUserId;
       
-      await _firestore.collection('rooms').doc(_roomId).update({
+      await roomRef.update({
         'answer': {
           'sdp': answer.sdp,
           'type': answer.type,
         },
-        'answerSentAt': FieldValue.serverTimestamp(),
+        'status': 'connected',
+        'participants.callee': currentUserId,
+        'joinedAt': FieldValue.serverTimestamp(),
       });
       
-      _logger.success('✅ Answer sent');
+      _logger.success('✅ Successfully joined room with schema: $roomId');
     } catch (e) {
-      _logger.error('❌ Failed to send answer: $e');
-      onError?.call('Failed to send answer: $e');
+      _logger.error('❌ Failed to join room: $e');
       rethrow;
     }
   }
 
-  /// Send ICE candidate to remote peer
-  Future<void> sendIceCandidate(RTCIceCandidate candidate) async {
+  /// Send ICE candidate using proper schema structure
+  Future<void> sendIceCandidate(String roomId, RTCIceCandidate candidate, bool isCaller) async {
     try {
-      if (_roomId == null) throw Exception('Room not initialized');
+      _logger.info('🧊 Sending ICE candidate with schema (isCaller: $isCaller)');
       
-      final candidateData = {
+      final roomRef = _firestore.collection('rooms').doc(roomId);
+      final candidateType = isCaller ? 'caller' : 'callee';
+      final candidatesRef = roomRef
+          .collection('candidates')
+          .doc(candidateType)
+          .collection('list');
+      
+      await candidatesRef.add({
         'candidate': candidate.candidate,
         'sdpMid': candidate.sdpMid,
         'sdpMLineIndex': candidate.sdpMLineIndex,
-        'timestamp': FieldValue.serverTimestamp(),
-        'fromPeer': _localPeerId,
-      };
+        'type': candidateType,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
       
-      // Store in local candidates collection
-      await _firestore
-          .collection('rooms')
-          .doc(_roomId)
-          .collection('candidates')
-          .doc('local')
-          .collection(_localPeerId!)
-          .add(candidateData);
-      
-      _logger.info('🧊 ICE candidate sent');
+      _logger.success('✅ ICE candidate sent with schema');
     } catch (e) {
       _logger.error('❌ Failed to send ICE candidate: $e');
-      onError?.call('Failed to send ICE candidate: $e');
       rethrow;
     }
   }
 
-  /// Listen for remote ICE candidates
-  void listenForRemoteCandidates() {
-    if (_roomId == null) return;
+  /// Listen for remote offer using enhanced schema
+  Stream<RTCSessionDescription> onRemoteOffer(String roomId) {
+    _logger.info('👂 Listening for remote offer with schema in room: $roomId');
     
-    final remotePeerId = _isOfferingPeer ? 'answerer' : 'offerer';
-    
-    _remoteCandidatesListener = _firestore
+    return _firestore
         .collection('rooms')
-        .doc(_roomId)
+        .doc(roomId)
+        .snapshots()
+        .where((snapshot) => snapshot.exists && snapshot.data()!['offer'] != null)
+        .map((snapshot) {
+          final data = snapshot.data()!;
+          final offer = data['offer'] as Map<String, dynamic>;
+          
+          _logger.info('📥 Received remote offer via schema');
+          return RTCSessionDescription(
+            offer['sdp'] as String,
+            offer['type'] as String,
+          );
+        });
+  }
+
+  /// Listen for remote answer using enhanced schema
+  Stream<RTCSessionDescription> onRemoteAnswer(String roomId) {
+    _logger.info('👂 Listening for remote answer with schema in room: $roomId');
+    
+    return _firestore
+        .collection('rooms')
+        .doc(roomId)
+        .snapshots()
+        .where((snapshot) => snapshot.exists && snapshot.data()!['answer'] != null)
+        .map((snapshot) {
+          final data = snapshot.data()!;
+          final answer = data['answer'] as Map<String, dynamic>;
+          
+          _logger.info('📥 Received remote answer via schema');
+          return RTCSessionDescription(
+            answer['sdp'] as String,
+            answer['type'] as String,
+          );
+        });
+  }
+
+  /// Listen for remote ICE candidates using proper schema structure
+  Stream<RTCIceCandidate> onRemoteIce(String roomId, bool isCaller) {
+    _logger.info('👂 Listening for remote ICE with schema (isCaller: $isCaller)');
+    
+    // Listen to the opposite collection (caller listens to callee candidates and vice versa)
+    final candidateType = isCaller ? 'callee' : 'caller';
+    
+    return _firestore
+        .collection('rooms')
+        .doc(roomId)
         .collection('candidates')
-        .doc('remote')
-        .collection(remotePeerId)
-        .orderBy('timestamp')
+        .doc(candidateType)
+        .collection('list')
+        .where('initialized', isNull: true) // Exclude init docs
         .snapshots()
-        .listen(
-      (snapshot) {
-        for (final change in snapshot.docChanges) {
-          if (change.type == DocumentChangeType.added) {
-            final data = change.doc.data() as Map<String, dynamic>;
-            
-            final candidate = RTCIceCandidate(
-              data['candidate'],
-              data['sdpMid'],
-              data['sdpMLineIndex'],
-            );
-            
-            _logger.info('🧊 Received remote ICE candidate');
-            onRemoteIceCandidate?.call(candidate);
-          }
-        }
-      },
-      onError: (error) {
-        _logger.error('❌ Error listening for remote candidates: $error');
-        onError?.call('Error listening for remote candidates: $error');
-      },
-    );
-  }
-
-  /// Setup room document listener for offers/answers
-  void _setupRoomListener() {
-    if (_roomId == null) return;
-    
-    _roomListener = _firestore
-        .collection('rooms')
-        .doc(_roomId)
-        .snapshots()
-        .listen(
-      (snapshot) {
-        if (!snapshot.exists) return;
-        
-        final data = snapshot.data() as Map<String, dynamic>;
-        
-        // Handle offer
-        if (data.containsKey('offer') && !_isOfferingPeer) {
-          final offerData = data['offer'] as Map<String, dynamic>;
-          final offer = RTCSessionDescription(
-            offerData['sdp'],
-            offerData['type'],
-          );
+        .expand((snapshot) => snapshot.docChanges)
+        .where((change) => change.type == DocumentChangeType.added)
+        .map((change) {
+          final data = change.doc.data()!;
           
-          _logger.info('📥 Received remote offer');
-          onRemoteOffer?.call(offer);
-        }
-        
-        // Handle answer
-        if (data.containsKey('answer') && _isOfferingPeer) {
-          final answerData = data['answer'] as Map<String, dynamic>;
-          final answer = RTCSessionDescription(
-            answerData['sdp'],
-            answerData['type'],
+          _logger.info('🧊 Received remote ICE candidate via schema');
+          return RTCIceCandidate(
+            data['candidate'] as String?,
+            data['sdpMid'] as String?,
+            data['sdpMLineIndex'] as int?,
           );
-          
-          _logger.info('📥 Received remote answer');
-          onRemoteAnswer?.call(answer);
-        }
-      },
-      onError: (error) {
-        _logger.error('❌ Error listening to room: $error');
-        onError?.call('Error listening to room: $error');
-      },
-    );
+        });
   }
 
-  /// Setup candidates listeners
-  void _setupCandidatesListeners() {
-    // Listen for candidates from remote peer
-    listenForRemoteCandidates();
-  }
-
-  /// Clean up room and close all connections
-  Future<void> cleanup() async {
+  /// Close and cleanup room using proper schema
+  Future<void> closeRoom(String roomId) async {
     try {
-      _logger.info('🧹 Cleaning up Firestore signaling');
+      _logger.info('🗑️ Closing room with schema cleanup: $roomId');
       
-      // Cancel listeners
-      await _roomListener?.cancel();
-      await _localCandidatesListener?.cancel();
-      await _remoteCandidatesListener?.cancel();
-      
-      // Delete room document and sub-collections
-      if (_roomId != null) {
-        await _deleteRoom(_roomId!);
-      }
-      
-      // Reset state
-      _roomId = null;
-      _localPeerId = null;
-      _isOfferingPeer = false;
-      
-      _logger.success('✅ Firestore signaling cleaned up');
-    } catch (e) {
-      _logger.error('❌ Error during cleanup: $e');
-    }
-  }
-
-  /// Delete room document and all sub-collections
-  Future<void> _deleteRoom(String roomId) async {
-    try {
-      final batch = _firestore.batch();
-      
-      // Delete candidates sub-collections
-      final candidatesRef = _firestore
-          .collection('rooms')
-          .doc(roomId)
-          .collection('candidates');
-      
-      final candidatesDocs = await candidatesRef.get();
-      for (final doc in candidatesDocs.docs) {
-        batch.delete(doc.reference);
-      }
-      
-      // Delete room document
       final roomRef = _firestore.collection('rooms').doc(roomId);
-      batch.delete(roomRef);
       
-      await batch.commit();
-      _logger.info('🗑️ Room deleted: $roomId');
+      // Update room status first
+      await roomRef.update({
+        'status': 'closed',
+        'closedAt': FieldValue.serverTimestamp(),
+      });
+      
+      // Delete caller candidates
+      final callerCandidates = await roomRef
+          .collection('candidates')
+          .doc('caller')
+          .collection('list')
+          .get();
+      for (final doc in callerCandidates.docs) {
+        await doc.reference.delete();
+      }
+      
+      // Delete callee candidates
+      final calleeCandidates = await roomRef
+          .collection('candidates')
+          .doc('callee')
+          .collection('list')
+          .get();
+      for (final doc in calleeCandidates.docs) {
+        await doc.reference.delete();
+      }
+      
+      // Delete candidates structure
+      await roomRef.collection('candidates').doc('caller').delete();
+      await roomRef.collection('candidates').doc('callee').delete();
+      
+      // Finally delete the room document
+      await roomRef.delete();
+      
+      _logger.success('✅ Room closed with full schema cleanup: $roomId');
     } catch (e) {
-      _logger.error('❌ Failed to delete room: $e');
+      _logger.error('❌ Failed to close room: $e');
+      rethrow;
     }
   }
 
-  /// Generate unique room ID
-  String _generateRoomId() {
-    return DateTime.now().millisecondsSinceEpoch.toString() +
-        (1000 + (999 * (DateTime.now().microsecond / 1000000))).floor().toString();
+  /// Check if room exists and get its status
+  Future<Map<String, dynamic>?> getRoomInfo(String roomId) async {
+    try {
+      final doc = await _firestore.collection('rooms').doc(roomId).get();
+      if (doc.exists) {
+        return doc.data();
+      }
+      return null;
+    } catch (e) {
+      _logger.error('❌ Failed to get room info: $e');
+      return null;
+    }
   }
 
-  /// Generate unique peer ID
-  String _generatePeerId() {
-    return 'peer_${DateTime.now().millisecondsSinceEpoch}_${DateTime.now().microsecond}';
+  /// Check if room exists
+  Future<bool> roomExists(String roomId) async {
+    try {
+      final doc = await _firestore.collection('rooms').doc(roomId).get();
+      return doc.exists;
+    } catch (e) {
+      _logger.error('❌ Failed to check room existence: $e');
+      return false;
+    }
   }
 
-  /// Disconnect from current room (alias for cleanup)
-  void disconnect() {
-    cleanup();
+  /// Get room status
+  Future<String?> getRoomStatus(String roomId) async {
+    try {
+      final doc = await _firestore.collection('rooms').doc(roomId).get();
+      if (doc.exists) {
+        return doc.data()?['status'] as String?;
+      }
+      return null;
+    } catch (e) {
+      _logger.error('❌ Failed to get room status: $e');
+      return null;
+    }
   }
 
-  /// Dispose resources
+  /// Dispose and cleanup resources
   void dispose() {
-    cleanup();
+    _logger.info('🗑️ Disposing FirestoreSignalingService');
+    // No specific cleanup needed for Firestore, but method is required by P2PManager
   }
 }

@@ -47,10 +47,12 @@ In Firebase Console → Firestore → Rules, use:
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Allow read/write to P2P rooms
+    // P2P rooms collection with enhanced schema
     match /rooms/{roomId} {
-      allow read, write: if true;
-      match /candidates/{candidateId} {
+      allow read, write: if true; // در تولید باید محدود شود
+      
+      // ICE candidates subcollection
+      match /candidates/{candidateType}/list/{candidateId} {
         allow read, write: if true;
       }
     }
@@ -58,7 +60,51 @@ service cloud.firestore {
 }
 ```
 
-### 7. Test Connection
+### 7. Firestore Schema Structure
+
+The Firestore database uses this optimized schema:
+
+```javascript
+// Collection: rooms/{roomId}
+{
+  offer: {
+    sdp: "v=0\r\no=...", 
+    type: "offer"
+  },
+  answer: {
+    sdp: "v=0\r\no=...",
+    type: "answer"
+  },
+  createdBy: "user_123456",     // Unique user ID
+  createdAt: Timestamp,
+  joinedAt: Timestamp,          // When callee joined
+  status: "waiting_for_answer", // waiting_for_answer | connected | closed
+  participants: {
+    caller: "user_123456",
+    callee: "user_789012"       // null until someone joins
+  }
+}
+
+// Subcollection: rooms/{roomId}/candidates/caller/list/{autoId}
+{
+  candidate: "candidate:...",
+  sdpMid: "0",
+  sdpMLineIndex: 0,
+  type: "caller",
+  createdAt: Timestamp
+}
+
+// Subcollection: rooms/{roomId}/candidates/callee/list/{autoId}
+{
+  candidate: "candidate:...",
+  sdpMid: "0", 
+  sdpMLineIndex: 0,
+  type: "callee",
+  createdAt: Timestamp
+}
+```
+
+### 8. Test Connection
 ```bash
 flutter run -d web-server --web-port 8080
 ```

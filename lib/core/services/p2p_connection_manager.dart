@@ -7,12 +7,11 @@ import '../utils/app_logger.dart';
 import 'modern_webrtc_service.dart';
 import 'firestore_signaling_service.dart';
 
-/// P2P Manager with Firestore signaling for real WebRTC state management
-/// Uses Firestore for signaling and WebRTC data channels for messaging
-class P2PManager {
+/// Core P2P connection manager that handles WebRTC and Firestore signaling
+/// This is the main class for P2P functionality
+class P2PConnectionManager {
   final ModernWebRTCService _webRTCService = ModernWebRTCService();
-  final FirestoreSignalingService _signalingService =
-      FirestoreSignalingService();
+  final FirestoreSignalingService _signalingService = FirestoreSignalingService();
   final AppLogger _logger = AppLogger();
 
   P2PConnectionInfo _connectionInfo = const P2PConnectionInfo(
