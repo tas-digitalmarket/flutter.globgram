@@ -1,0 +1,13 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Run Flutter Web App",
+			"type": "shell",
+			"command": "cd \"d:\\برنامه نویسی\\globgramflutter\" && flutter run -d web-server --web-port 8081",
+			"group": "test",
+			"isBackground": true,
+			"problemMatcher": []
+		}
+	]
+}
