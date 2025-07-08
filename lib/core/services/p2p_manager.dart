@@ -8,7 +8,9 @@ import 'modern_webrtc_service.dart';
 import 'firestore_signaling_service.dart';
 
 /// P2P Manager with Firestore signaling for real WebRTC state management
-/// Uses Firestore for signaling and WebRTC data channels for messaging
+/// Uses Firestore ONLY for WebRTC signaling (offer/answer/ICE candidates)
+/// All messaging is handled through WebRTC data channels (RTCDataChannel)
+/// No BroadcastChannel or other signaling methods are used for messaging
 class P2PManager {
   final ModernWebRTCService _webRTCService = ModernWebRTCService();
   final FirestoreSignalingService _signalingService =

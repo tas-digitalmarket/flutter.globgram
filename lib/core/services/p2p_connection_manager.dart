@@ -8,7 +8,9 @@ import 'modern_webrtc_service.dart';
 import 'firestore_signaling_service.dart';
 
 /// Core P2P connection manager that handles WebRTC and Firestore signaling
-/// This is the main class for P2P functionality
+/// Firestore is used ONLY for WebRTC signaling (offer/answer/ICE candidates)
+/// All messaging is handled through RTCDataChannel exclusively
+/// This ensures true peer-to-peer communication without server dependency
 class P2PConnectionManager {
   final ModernWebRTCService _webRTCService = ModernWebRTCService();
   final FirestoreSignalingService _signalingService = FirestoreSignalingService();

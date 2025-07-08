@@ -3,7 +3,8 @@ import 'package:flutter_webrtc/flutter_webrtc.dart';
 import '../utils/app_logger.dart';
 
 /// Modern WebRTC Service with proper STUN/TURN servers and real connection state management
-/// Designed to work with Firebase signaling service
+/// Handles WebRTC peer connections and RTCDataChannel messaging
+/// All chat messages are sent through RTCDataChannel.send() for true P2P communication
 class ModernWebRTCService {
   final AppLogger _logger = AppLogger();
   
