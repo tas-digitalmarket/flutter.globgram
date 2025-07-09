@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import '../utils/app_logger.dart';
 
@@ -31,8 +32,13 @@ class ModernWebRTCService {
       
       _peerConnection = await createPeerConnection(configuration);
       
-      // Set up connection state monitoring
+      // Enhanced connection state monitoring with immediate callback
       _peerConnection!.onConnectionState = (RTCPeerConnectionState state) {
+        debugPrint('RTCPeerConnectionState: $state');
+        if (state == RTCPeerConnectionState.RTCPeerConnectionStateConnected) {
+          debugPrint('🎉 P2P connection established successfully!');
+        }
+        
         _logger.info('🔗 Connection state changed: $state');
         onConnectionStateChanged?.call(state);
       };
