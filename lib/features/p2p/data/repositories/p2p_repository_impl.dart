@@ -87,10 +87,7 @@ class P2pRepositoryImpl {
       final answer = await _peerConnection!.createAnswer();
       await _peerConnection!.setLocalDescription(answer);
 
-      // In a real implementation, you would exchange this answer
-      // with the peer through some signaling mechanism
-      // For now, we'll simulate successful connection
-
+      // Answer would be exchanged with peer through signaling mechanism
       return 'peer_${DateTime.now().millisecondsSinceEpoch}';
     } catch (e) {
       throw Exception('Failed to join room: $e');

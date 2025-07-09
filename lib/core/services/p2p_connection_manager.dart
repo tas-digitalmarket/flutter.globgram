@@ -218,6 +218,11 @@ class P2PConnectionManager extends ChangeNotifier {
 
     _webRTCService.onDataChannelOpen = () {
       _logger.success('📡 Data channel opened - ready for messaging');
+      _updateConnectionInfo(
+        _connectionInfo.copyWith(
+          connectionState: PeerConnectionState.connected,
+        ),
+      );
     };
 
     _webRTCService.onIceCandidate = (RTCIceCandidate candidate) async {

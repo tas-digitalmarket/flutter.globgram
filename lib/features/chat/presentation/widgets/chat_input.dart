@@ -96,7 +96,7 @@ class _ChatInputState extends State<ChatInput> {
             GestureDetector(
               onTapDown: (_) => widget.onStartRecording(),
               onTapUp: (_) {
-                // Simulate recording completion
+                // Recording completion (placeholder - needs flutter_sound integration)
                 widget.onStopRecording(
                     'dummy_path', const Duration(seconds: 5));
               },

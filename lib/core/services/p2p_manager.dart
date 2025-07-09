@@ -227,6 +227,11 @@ class P2PManager extends ChangeNotifier {
 
     _webRTCService.onDataChannelOpen = () {
       _logger.success('📡 Data channel opened - ready for messaging');
+      _updateConnectionInfo(
+        _connectionInfo.copyWith(
+          connectionState: PeerConnectionState.connected,
+        ),
+      );
     };
 
     _webRTCService.onIceCandidate = (RTCIceCandidate candidate) async {
@@ -244,6 +249,17 @@ class P2PManager extends ChangeNotifier {
       _dataChannel = await _webRTCService.createDataChannel('chat', {
         'ordered': true,
       });
+
+      _dataChannel!.onDataChannelState = (RTCDataChannelState state) {
+        debugPrint('RTCDataChannelState: $state');
+        if (state == RTCDataChannelState.RTCDataChannelOpen) {
+          _updateConnectionInfo(
+            _connectionInfo.copyWith(
+              connectionState: PeerConnectionState.connected,
+            ),
+          );
+        }
+      };
 
       _dataChannel!.onMessage = (RTCDataChannelMessage message) {
         _webRTCService.onDataChannelMessage?.call(message.text);

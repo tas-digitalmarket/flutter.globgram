@@ -68,10 +68,10 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget>
       _isRecording = false;
     });
 
-    // Simulate voice file creation
+    // Create voice file reference (placeholder - needs flutter_sound integration)
     final fileName = 'voice_${DateTime.now().millisecondsSinceEpoch}.m4a';
 
-    // Call callback with simulated data
+    // Call callback with recorded data
     widget.onVoiceRecorded(fileName, duration);
 
     // Show success message

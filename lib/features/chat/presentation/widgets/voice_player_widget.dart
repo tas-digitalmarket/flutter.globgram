@@ -31,7 +31,7 @@ class _VoicePlayerWidgetState extends State<VoicePlayerWidget> {
         ),
       );
 
-      // Simulate playback duration
+      // Play voice message (placeholder - needs flutter_sound integration)
       await Future.delayed(widget.duration);
 
       if (mounted) {
