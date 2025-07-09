@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "1054348316880",
+    "project_id": "globgram-p2p",
+    "storage_bucket": "globgram-p2p.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1054348316880:android:17931bb01d4004ca644ed5",
+        "android_client_info": {
+          "package_name": "com.example.globgram_p2p"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBOdwk8NpM7J-ibYgQIhIat4Oje07ur4f4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1054348316880:android:585c024c2149cfae644ed5",
+        "android_client_info": {
+          "package_name": "com.tasdigitalmarket.globgram"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBOdwk8NpM7J-ibYgQIhIat4Oje07ur4f4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

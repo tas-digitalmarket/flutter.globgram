@@ -38,20 +38,20 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'AIzaSyDemoKey12345678901234567890123456',
-    appId: '1:123456789012:web:abcdef1234567890abcdef',
-    messagingSenderId: '123456789012',
-    projectId: 'globgram-demo-project',
-    authDomain: 'globgram-demo-project.firebaseapp.com',
-    storageBucket: 'globgram-demo-project.appspot.com',
+    apiKey: 'AIzaSyApWoZ0L52510hGYQVhWs_MjMesmWRvqPY',
+    appId: '1:1054348316880:web:abcd315fb224214a644ed5',
+    messagingSenderId: '1054348316880',
+    projectId: 'globgram-p2p',
+    authDomain: 'globgram-p2p.firebaseapp.com',
+    storageBucket: 'globgram-p2p.firebasestorage.app',
   );
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyDemoKey12345678901234567890123456',
-    appId: '1:123456789012:android:abcdef1234567890abcdef',
-    messagingSenderId: '123456789012',
-    projectId: 'globgram-demo-project',
-    storageBucket: 'globgram-demo-project.appspot.com',
+    apiKey: 'AIzaSyBOdwk8NpM7J-ibYgQIhIat4Oje07ur4f4',
+    appId: '1:1054348316880:android:17931bb01d4004ca644ed5',
+    messagingSenderId: '1054348316880',
+    projectId: 'globgram-p2p',
+    storageBucket: 'globgram-p2p.firebasestorage.app',
   );
 
   static const FirebaseOptions ios = FirebaseOptions(
