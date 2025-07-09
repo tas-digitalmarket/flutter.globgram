@@ -53,19 +53,28 @@ class P2PManager extends ChangeNotifier {
       ));
 
       // Initialize WebRTC with STUN/TURN servers
+      _logger.info('🔧 Initializing WebRTC...');
       await _initializeWebRTC();
+      _logger.success('✅ WebRTC initialized');
+      
       _setupWebRTCCallbacks();
 
       // Create data channel (caller creates)
+      _logger.info('📡 Creating data channel...');
       await _createDataChannel();
+      _logger.success('✅ Data channel created');
 
       // Create offer
+      _logger.info('📤 Creating offer...');
       final offer = await _webRTCService.createOffer();
       await _webRTCService.setLocalDescription(offer);
+      _logger.success('✅ Offer created and set');
 
       // Create room with offer in Firestore
+      _logger.info('🏠 Creating room in Firestore...');
       final roomId = await _signalingService.createRoom(offer);
       _currentRoomId = roomId;
+      _logger.success('✅ Room created in Firestore: $roomId');
 
       _updateConnectionInfo(_connectionInfo.copyWith(
         roomId: roomId,
@@ -73,11 +82,14 @@ class P2PManager extends ChangeNotifier {
       ));
 
       // Start listening for answer and ICE candidates
+      _logger.info('👂 Setting up signaling listeners...');
       _setupSignalingListeners();
+      _logger.success('✅ Signaling listeners set up');
 
       _logger.success('✅ Successfully created room: $roomId');
       return roomId;
     } catch (e) {
+      _logger.error('❌ Failed to create room: $e');
       _handleError('Failed to create room: $e');
       rethrow;
     }
