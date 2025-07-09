@@ -253,6 +253,27 @@ class P2PManager extends ChangeNotifier {
             _currentRoomId!, candidate, _isCaller);
       }
     };
+
+    _webRTCService.onDataChannelReceived = (RTCDataChannel channel) {
+      _logger.info('📡 Data channel received by callee');
+      _dataChannel = channel;
+      
+      // Set up data channel state listener for callee
+      _dataChannel!.onDataChannelState = (RTCDataChannelState state) {
+        debugPrint('RTCDataChannelState (callee): $state');
+        if (state == RTCDataChannelState.RTCDataChannelOpen) {
+          _updateConnectionInfo(
+            _connectionInfo.copyWith(
+              connectionState: PeerConnectionState.connected,
+            ),
+          );
+        }
+      };
+
+      _dataChannel!.onMessage = (RTCDataChannelMessage message) {
+        _webRTCService.onDataChannelMessage?.call(message.text);
+      };
+    };
   }
 
   /// Create data channel for chat messages (caller only)

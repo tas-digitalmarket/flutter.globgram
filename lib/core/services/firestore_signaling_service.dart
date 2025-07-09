@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import '../utils/app_logger.dart';
@@ -18,51 +17,27 @@ import '../utils/app_logger.dart';
 class FirestoreSignalingService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final AppLogger _logger = AppLogger();
-  
-  // Generate unique user ID for room creator tracking
-  String get _currentUserId => 'user_${Random().nextInt(999999).toString().padLeft(6, '0')}';
 
   /// Create a new room with proper schema and store the offer
   /// Returns the generated room ID
   Future<String> createRoom(RTCSessionDescription offer) async {
     try {
-      _logger.info('🏠 Creating Firestore room with enhanced schema');
+      _logger.info('🏠 Creating Firestore room');
       
       final roomRef = _firestore.collection('rooms').doc();
       final roomId = roomRef.id;
-      final currentUserId = _currentUserId;
       
-      // Main room document with full schema
       await roomRef.set({
         'offer': {
           'sdp': offer.sdp,
           'type': offer.type,
         },
-        'createdBy': currentUserId,
         'createdAt': FieldValue.serverTimestamp(),
-        'status': 'waiting_for_answer',
-        'participants': {
-          'caller': currentUserId,
-          'callee': null,
-        }
+        'status': 'waiting',
+        'createdBy': 'caller',
       });
       
-      // Create candidates subcollection structure
-      final candidatesRef = roomRef.collection('candidates');
-      
-      // Initialize caller candidates collection
-      await candidatesRef.doc('caller').collection('list').doc('_init').set({
-        'initialized': true,
-        'createdAt': FieldValue.serverTimestamp(),
-      });
-      
-      // Initialize callee candidates collection  
-      await candidatesRef.doc('callee').collection('list').doc('_init').set({
-        'initialized': true,
-        'createdAt': FieldValue.serverTimestamp(),
-      });
-      
-      _logger.success('✅ Room created successfully with schema: $roomId');
+      _logger.success('✅ Room created successfully: $roomId');
       return roomId;
     } catch (e) {
       _logger.error('❌ Failed to create room: $e');
@@ -73,22 +48,21 @@ class FirestoreSignalingService {
   /// Join an existing room by setting the answer and updating participant info
   Future<void> joinRoom(String roomId, RTCSessionDescription answer) async {
     try {
-      _logger.info('🚪 Joining room $roomId with enhanced schema');
+      _logger.info('🚪 Joining room $roomId');
       
       final roomRef = _firestore.collection('rooms').doc(roomId);
-      final currentUserId = _currentUserId;
       
       await roomRef.update({
         'answer': {
           'sdp': answer.sdp,
           'type': answer.type,
         },
-        'status': 'connected',
-        'participants.callee': currentUserId,
         'joinedAt': FieldValue.serverTimestamp(),
+        'status': 'connected',
+        'joinedBy': 'callee',
       });
       
-      _logger.success('✅ Successfully joined room with schema: $roomId');
+      _logger.success('✅ Successfully joined room: $roomId');
     } catch (e) {
       _logger.error('❌ Failed to join room: $e');
       rethrow;
@@ -98,24 +72,19 @@ class FirestoreSignalingService {
   /// Send ICE candidate using proper schema structure
   Future<void> sendIceCandidate(String roomId, RTCIceCandidate candidate, bool isCaller) async {
     try {
-      _logger.info('🧊 Sending ICE candidate with schema (isCaller: $isCaller)');
+      _logger.info('🧊 Sending ICE candidate (isCaller: $isCaller)');
       
       final roomRef = _firestore.collection('rooms').doc(roomId);
       final candidateType = isCaller ? 'caller' : 'callee';
-      final candidatesRef = roomRef
-          .collection('candidates')
-          .doc(candidateType)
-          .collection('list');
       
-      await candidatesRef.add({
+      await roomRef.collection('candidates').doc(candidateType).collection('list').add({
         'candidate': candidate.candidate,
         'sdpMid': candidate.sdpMid,
         'sdpMLineIndex': candidate.sdpMLineIndex,
-        'type': candidateType,
-        'createdAt': FieldValue.serverTimestamp(),
+        'timestamp': FieldValue.serverTimestamp(),
       });
       
-      _logger.success('✅ ICE candidate sent with schema');
+      _logger.success('✅ ICE candidate sent');
     } catch (e) {
       _logger.error('❌ Failed to send ICE candidate: $e');
       rethrow;
@@ -124,18 +93,18 @@ class FirestoreSignalingService {
 
   /// Listen for remote offer using enhanced schema
   Stream<RTCSessionDescription> onRemoteOffer(String roomId) {
-    _logger.info('👂 Listening for remote offer with schema in room: $roomId');
+    _logger.info('👂 Listening for remote offer in room: $roomId');
     
     return _firestore
         .collection('rooms')
         .doc(roomId)
         .snapshots()
-        .where((snapshot) => snapshot.exists && snapshot.data()!['offer'] != null)
+        .where((snapshot) => snapshot.exists && snapshot.data()!.containsKey('offer'))
         .map((snapshot) {
           final data = snapshot.data()!;
           final offer = data['offer'] as Map<String, dynamic>;
           
-          _logger.info('📥 Received remote offer via schema');
+          _logger.info('📥 Received remote offer');
           return RTCSessionDescription(
             offer['sdp'] as String,
             offer['type'] as String,
@@ -145,18 +114,18 @@ class FirestoreSignalingService {
 
   /// Listen for remote answer using enhanced schema
   Stream<RTCSessionDescription> onRemoteAnswer(String roomId) {
-    _logger.info('👂 Listening for remote answer with schema in room: $roomId');
+    _logger.info('👂 Listening for remote answer in room: $roomId');
     
     return _firestore
         .collection('rooms')
         .doc(roomId)
         .snapshots()
-        .where((snapshot) => snapshot.exists && snapshot.data()!['answer'] != null)
+        .where((snapshot) => snapshot.exists && snapshot.data()!.containsKey('answer'))
         .map((snapshot) {
           final data = snapshot.data()!;
           final answer = data['answer'] as Map<String, dynamic>;
           
-          _logger.info('📥 Received remote answer via schema');
+          _logger.info('📥 Received remote answer');
           return RTCSessionDescription(
             answer['sdp'] as String,
             answer['type'] as String,
@@ -166,7 +135,7 @@ class FirestoreSignalingService {
 
   /// Listen for remote ICE candidates using proper schema structure
   Stream<RTCIceCandidate> onRemoteIce(String roomId, bool isCaller) {
-    _logger.info('👂 Listening for remote ICE with schema (isCaller: $isCaller)');
+    _logger.info('👂 Listening for remote ICE (isCaller: $isCaller)');
     
     // Listen to the opposite collection (caller listens to callee candidates and vice versa)
     final candidateType = isCaller ? 'callee' : 'caller';
@@ -177,14 +146,13 @@ class FirestoreSignalingService {
         .collection('candidates')
         .doc(candidateType)
         .collection('list')
-        .where('initialized', isNull: true) // Exclude init docs
         .snapshots()
         .expand((snapshot) => snapshot.docChanges)
         .where((change) => change.type == DocumentChangeType.added)
         .map((change) {
           final data = change.doc.data()!;
           
-          _logger.info('🧊 Received remote ICE candidate via schema');
+          _logger.info('🧊 Received remote ICE candidate');
           return RTCIceCandidate(
             data['candidate'] as String?,
             data['sdpMid'] as String?,

@@ -21,6 +21,7 @@ class ModernWebRTCService {
   // Callbacks
   Function(RTCPeerConnectionState)? onConnectionStateChanged;
   Function(String)? onDataChannelMessage;
+  Function(RTCDataChannel)? onDataChannelReceived;
   Function()? onDataChannelOpen;
   Function(RTCIceCandidate)? onIceCandidate;
   Function(String)? onError;
@@ -52,7 +53,9 @@ class ModernWebRTCService {
       // Set up data channel receiving
       _peerConnection!.onDataChannel = (RTCDataChannel channel) {
         _logger.info('📡 Data channel received: ${channel.label}');
+        _dataChannel = channel; // Store the received data channel
         _setupDataChannelListeners(channel);
+        onDataChannelReceived?.call(channel);
       };
 
       _isInitialized = true;
@@ -60,7 +63,7 @@ class ModernWebRTCService {
     } catch (e) {
       _logger.error('❌ Failed to initialize WebRTC: $e');
       onError?.call('Failed to initialize WebRTC: $e');
-      throw e;
+      rethrow;
     }
   }
 
@@ -77,7 +80,7 @@ class ModernWebRTCService {
       return offer;
     } catch (e) {
       _logger.error('❌ Failed to create offer: $e');
-      throw e;
+      rethrow;
     }
   }
 
@@ -94,7 +97,7 @@ class ModernWebRTCService {
       return answer;
     } catch (e) {
       _logger.error('❌ Failed to create answer: $e');
-      throw e;
+      rethrow;
     }
   }
 
@@ -109,7 +112,7 @@ class ModernWebRTCService {
       _logger.info('📝 Local description set: ${description.type}');
     } catch (e) {
       _logger.error('❌ Failed to set local description: $e');
-      throw e;
+      rethrow;
     }
   }
 
@@ -124,7 +127,7 @@ class ModernWebRTCService {
       _logger.info('📝 Remote description set: ${description.type}');
     } catch (e) {
       _logger.error('❌ Failed to set remote description: $e');
-      throw e;
+      rethrow;
     }
   }
 
@@ -139,7 +142,7 @@ class ModernWebRTCService {
       _logger.debug('🧊 ICE candidate added');
     } catch (e) {
       _logger.error('❌ Failed to add ICE candidate: $e');
-      throw e;
+      rethrow;
     }
   }
 
@@ -162,7 +165,7 @@ class ModernWebRTCService {
       return _dataChannel!;
     } catch (e) {
       _logger.error('❌ Failed to create data channel: $e');
-      throw e;
+      rethrow;
     }
   }
 
@@ -197,7 +200,7 @@ class ModernWebRTCService {
       _logger.debug('📤 Message sent through data channel');
     } catch (e) {
       _logger.error('❌ Failed to send data channel message: $e');
-      throw e;
+      rethrow;
     }
   }
 
@@ -230,6 +233,7 @@ class ModernWebRTCService {
     disconnect();
     onConnectionStateChanged = null;
     onDataChannelMessage = null;
+    onDataChannelReceived = null;
     onDataChannelOpen = null;
     onIceCandidate = null;
     onError = null;
