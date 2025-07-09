@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import '../models/p2p_models.dart';
@@ -178,7 +177,7 @@ class P2PManager {
     _webRTCService.onConnectionStateChanged = (RTCPeerConnectionState state) {
       _logger.info('🔗 WebRTC connection state: $state');
 
-      // Enhanced connection state callback as requested
+      // Enhanced connection state callback as requested - Step 1
       debugPrint('RTCPeerConnectionState: $state');
       if (state == RTCPeerConnectionState.RTCPeerConnectionStateConnected) {
         _updateConnectionInfo(
