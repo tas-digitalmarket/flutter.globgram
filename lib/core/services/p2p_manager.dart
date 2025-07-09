@@ -14,7 +14,7 @@ import 'firestore_signaling_service.dart';
 /// ✅ All fake signaling paths removed (BroadcastChannel eliminated)
 /// ✅ STUN/TURN servers properly configured
 /// ✅ RTCDataChannel is the ONLY messaging path
-class P2PManager {
+class P2PManager extends ChangeNotifier {
   final ModernWebRTCService _webRTCService = ModernWebRTCService();
   final FirestoreSignalingService _signalingService =
       FirestoreSignalingService();
@@ -322,6 +322,7 @@ class P2PManager {
   void _updateConnectionInfo(P2PConnectionInfo newInfo) {
     _connectionInfo = newInfo;
     onConnectionInfoChanged?.call(_connectionInfo);
+    notifyListeners(); // Ensure UI gets notified
   }
 
   void _handleError(String error) {
@@ -330,6 +331,7 @@ class P2PManager {
   }
 
   /// Dispose all resources
+  @override
   void dispose() {
     leaveRoom();
     _webRTCService.dispose();
@@ -339,5 +341,7 @@ class P2PManager {
     onMessageReceived = null;
     onFileReceived = null;
     onError = null;
+    
+    super.dispose();
   }
 }

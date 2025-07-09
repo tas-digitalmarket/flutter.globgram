@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import '../models/p2p_models.dart';
 import '../utils/app_logger.dart';
@@ -14,7 +14,7 @@ import 'firestore_signaling_service.dart';
 /// ✅ BroadcastChannel completely eliminated 
 /// ✅ Firestore used ONLY for WebRTC signaling (offers/answers/ICE)
 /// ✅ All chat messages via RTCDataChannel exclusively
-class P2PConnectionManager {
+class P2PConnectionManager extends ChangeNotifier {
   final ModernWebRTCService _webRTCService = ModernWebRTCService();
   final FirestoreSignalingService _signalingService = FirestoreSignalingService();
   final AppLogger _logger = AppLogger();
@@ -313,6 +313,7 @@ class P2PConnectionManager {
   void _updateConnectionInfo(P2PConnectionInfo newInfo) {
     _connectionInfo = newInfo;
     onConnectionInfoChanged?.call(_connectionInfo);
+    notifyListeners(); // Ensure UI gets notified
   }
 
   void _handleError(String error) {
@@ -321,6 +322,7 @@ class P2PConnectionManager {
   }
 
   /// Dispose all resources
+  @override
   void dispose() {
     leaveRoom();
     _webRTCService.dispose();
@@ -330,5 +332,7 @@ class P2PConnectionManager {
     onMessageReceived = null;
     onFileReceived = null;
     onError = null;
+    
+    super.dispose();
   }
 }
