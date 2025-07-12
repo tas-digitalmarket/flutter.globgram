@@ -91,24 +91,13 @@ class FirestoreSignalingService {
   /// Send ICE candidate using proper schema structure
   Future<void> sendIceCandidate(String roomId, RTCIceCandidate c, bool isCaller) async {
     try {
-      final targetPath = isCaller ? 'caller' : 'callee';
-      _logger.info('🧊 Sending ICE candidate (isCaller: $isCaller, saving to: $targetPath)');
-      _logger.debug('🧊 ICE candidate: ${c.candidate?.substring(0, 50)}...');
-      _logger.debug('🧊 ICE sdpMid: ${c.sdpMid}');
-      _logger.debug('🧊 ICE sdpMLineIndex: ${c.sdpMLineIndex}');
-      
-      final candidateData = c.toMap();
-      _logger.debug('🧊 ICE data keys: ${candidateData.keys.toList()}');
-      
-      final docRef = await _db
+      await _db
           .collection('rooms')
           .doc(roomId)
           .collection('candidates')
           .doc(isCaller ? 'caller' : 'callee')
           .collection('list')
-          .add(candidateData);
-      
-      _logger.success('✅ ICE candidate sent successfully to: ${docRef.path}');
+          .add(c.toMap());
     } catch (e) {
       _logger.error('❌ Failed to send ICE candidate: $e');
       rethrow;
@@ -152,31 +141,21 @@ class FirestoreSignalingService {
     });
   }
 
-  Stream<RTCIceCandidate> onRemoteIce(String roomId, bool isCaller) {
-    final targetPath = isCaller ? 'callee' : 'caller';
-    _logger.info('👂 Listening for remote ICE (isCaller: $isCaller, listening to: $targetPath)');
-    
-    return _db
-        .collection('rooms/$roomId/candidates')
+  Stream<RTCIceCandidate> onRemoteIce(
+    String roomId, bool isCaller) =>
+    _db
+        .collection('rooms')
+        .doc(roomId)
+        .collection('candidates')
         .doc(isCaller ? 'callee' : 'caller')
         .collection('list')
         .snapshots()
-        .expand((q) {
-      _logger.info('📊 ICE snapshot received with ${q.docs.length} total docs, ${q.docChanges.length} changes');
-      return q.docChanges.where((c) => c.type == DocumentChangeType.added);
-    })
-        .map((c) {
-      _logger.success('🧊 Processing new ICE candidate from remote peer');
-      final data = c.doc.data() as Map<String, dynamic>;
-      _logger.debug('🧊 ICE data: ${data.keys.toList()}');
-      
-      return RTCIceCandidate(
-        data['candidate'],
-        data['sdpMid'],
-        data['sdpMLineIndex'],
-      );
-    });
-  }
+        .expand((q) => q.docChanges)
+        .map((chg) => RTCIceCandidate(
+              chg.doc['candidate'],
+              chg.doc['sdpMid'],
+              chg.doc['sdpMLineIndex'],
+            ));
 
   /// Close and cleanup room using proper schema
   Future<void> closeRoom(String roomId) async {
