@@ -24,6 +24,9 @@ class P2PManager extends ChangeNotifier {
   String? _currentRoomId;
   RTCDataChannel? _dataChannel;
   bool _isCaller = false;
+  
+  // Buffer for ICE candidates generated before roomId is available
+  final List<RTCIceCandidate> _pendingIceCandidates = [];
 
   // Stream subscriptions for cleanup
   StreamSubscription<RTCSessionDescription>? _offerSubscription;
@@ -67,11 +70,14 @@ class P2PManager extends ChangeNotifier {
       await _webRTCService.setLocalDescription(offer);
       _logger.success('✅ Offer created and set as local description');
 
-      // Create room with offer in Firestore
+      // Create room with offer in Firestore - Caller after createRoom
       _logger.info('🏠 Creating room in Firestore...');
       _currentRoomId = await _signalingService.createRoom(offer);
       _isCaller = true;
       _logger.success('✅ Room created in Firestore: $_currentRoomId');
+      
+      // Send any ICE candidates that were buffered during offer creation
+      await _sendPendingIceCandidates();
 
       _updateConnectionInfo(_connectionInfo.copyWith(
         roomId: _currentRoomId,
@@ -99,6 +105,10 @@ class P2PManager extends ChangeNotifier {
       
       _logger.info('🚪 Joining room: $roomId as callee');
       _currentRoomId = roomId;
+      _isCaller = false;
+      
+      // Send any buffered ICE candidates (should be empty for callee)
+      await _sendPendingIceCandidates();
 
       _updateConnectionInfo(_connectionInfo.copyWith(
         roomId: roomId,
@@ -132,9 +142,6 @@ class P2PManager extends ChangeNotifier {
         await _signalingService.joinRoom(roomId, answer);
         _logger.success('✅ Answer sent to Firestore successfully');
         
-        // Set room state
-        _currentRoomId = roomId;
-        _isCaller = false;
       } catch (e) {
         _logger.error('❌ Failed to get remote offer or send answer: $e');
         throw Exception('Signaling failed: $e');
@@ -156,14 +163,8 @@ class P2PManager extends ChangeNotifier {
   Future<void> _initializeWebRTC() async {
     final configuration = {
       'iceServers': [
-        {
-          'urls': 'stun:stun.l.google.com:19302',
-        },
-        {
-          'urls': 'turn:relay.metered.ca:80',
-          'username': 'webrtc',
-          'credential': 'webrtc',
-        },
+        {'urls': 'stun:stun.l.google.com:19302'},
+        {'urls': 'stun:stun1.l.google.com:19302'},
       ]
     };
 
@@ -264,10 +265,13 @@ class P2PManager extends ChangeNotifier {
 
     // ICE candidate callback - writes ICE to Firestore
     _webRTCService.onIceCandidate = (c) {
+      _logger.info('🧊 ICE candidate generated: ${c.candidate}');
       if (_currentRoomId == null) {
-        debugPrint('⚠️  sendIceCandidate skipped: roomId is null');
+        _logger.warning('⚠️  roomId is null, buffering ICE candidate');
+        _pendingIceCandidates.add(c);
         return;
       }
+      _logger.info('📤 Sending ICE candidate to Firestore...');
       _signalingService.sendIceCandidate(_currentRoomId!, c, _isCaller);
     };
 
@@ -385,6 +389,25 @@ class P2PManager extends ChangeNotifier {
     } catch (e) {
       _handleError('Failed to leave room: $e');
     }
+  }
+
+  /// Send any buffered ICE candidates that were generated before roomId was available
+  Future<void> _sendPendingIceCandidates() async {
+    if (_currentRoomId == null || _pendingIceCandidates.isEmpty) return;
+    
+    _logger.info('📤 Sending ${_pendingIceCandidates.length} buffered ICE candidates...');
+    
+    for (final candidate in _pendingIceCandidates) {
+      try {
+        await _signalingService.sendIceCandidate(_currentRoomId!, candidate, _isCaller);
+        _logger.success('✅ Buffered ICE candidate sent');
+      } catch (e) {
+        _logger.error('❌ Failed to send buffered ICE candidate: $e');
+      }
+    }
+    
+    _pendingIceCandidates.clear();
+    _logger.success('✅ All buffered ICE candidates sent');
   }
 
   void _updateConnectionInfo(P2PConnectionInfo newInfo) {

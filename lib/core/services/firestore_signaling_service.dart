@@ -91,6 +91,11 @@ class FirestoreSignalingService {
   /// Send ICE candidate using proper schema structure
   Future<void> sendIceCandidate(String roomId, RTCIceCandidate c, bool isCaller) async {
     try {
+      _logger.info('🧊 Sending ICE candidate: ${isCaller ? "caller" : "callee"} -> room: $roomId');
+      _logger.debug('🔍 ICE candidate: ${c.candidate}');
+      _logger.debug('🔍 ICE sdpMid: ${c.sdpMid}');
+      _logger.debug('🔍 ICE sdpMLineIndex: ${c.sdpMLineIndex}');
+      
       await _db
           .collection('rooms')
           .doc(roomId)
@@ -98,6 +103,8 @@ class FirestoreSignalingService {
           .doc(isCaller ? 'caller' : 'callee')
           .collection('list')
           .add(c.toMap());
+          
+      _logger.success('✅ ICE candidate sent successfully');
     } catch (e) {
       _logger.error('❌ Failed to send ICE candidate: $e');
       rethrow;
@@ -142,20 +149,30 @@ class FirestoreSignalingService {
   }
 
   Stream<RTCIceCandidate> onRemoteIce(
-    String roomId, bool isCaller) =>
-    _db
+    String roomId, bool isCaller) {
+    _logger.info('👂 Listening for remote ICE candidates: ${isCaller ? "callee" : "caller"} -> room: $roomId');
+    
+    return _db
         .collection('rooms')
         .doc(roomId)
         .collection('candidates')
         .doc(isCaller ? 'callee' : 'caller')
         .collection('list')
         .snapshots()
-        .expand((q) => q.docChanges)
-        .map((chg) => RTCIceCandidate(
-              chg.doc['candidate'],
-              chg.doc['sdpMid'],
-              chg.doc['sdpMLineIndex'],
-            ));
+        .map((querySnapshot) {
+          _logger.info('🧊 ICE snapshot received with ${querySnapshot.docs.length} docs');
+          return querySnapshot.docChanges;
+        })
+        .expand((changes) => changes)
+        .map((chg) {
+          _logger.success('📥 Received remote ICE candidate: ${chg.doc.data()}');
+          return RTCIceCandidate(
+                chg.doc['candidate'],
+                chg.doc['sdpMid'],
+                chg.doc['sdpMLineIndex'],
+              );
+        });
+  }
 
   /// Close and cleanup room using proper schema
   Future<void> closeRoom(String roomId) async {
@@ -216,4 +233,15 @@ class FirestoreSignalingService {
     _logger.info('🗑️ Disposing FirestoreSignalingService');
     // No specific cleanup needed for Firestore, but method is required by P2PManager
   }
-}
+
+  /// Generate a room ID without creating the room yet
+  /// This allows setting _currentRoomId before ICE gathering starts
+  String generateRoomId() {
+    return _db.collection('rooms').doc().id;
+  }
+
+  /// Create a room with a pre-generated ID and offer
+  Future<void> createRoomWithId(String roomId, RTCSessionDescription offer) async {
+    try {
+      _logger.info('🏠 Creating Firestore room with ID: $roomId');
+      _logger.debug('🔍 Offer SDP length: ${offer.sdp?.length
