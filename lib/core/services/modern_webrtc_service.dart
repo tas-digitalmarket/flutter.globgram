@@ -101,14 +101,17 @@ class ModernWebRTCService {
   }
 
   /// Create an answer for incoming offer
-  Future<RTCSessionDescription> createAnswer() async {
+  Future<RTCSessionDescription> createAnswer([Map<String, dynamic>? constraints]) async {
     if (_peerConnection == null) {
       throw Exception('WebRTC not initialized');
     }
 
     try {
       _logger.info('📤 Creating answer');
-      final answer = await _peerConnection!.createAnswer();
+      if (constraints != null) {
+        _logger.debug('🔧 Answer constraints: $constraints');
+      }
+      final answer = await _peerConnection!.createAnswer(constraints ?? {});
       _logger.success('✅ Answer created successfully');
       return answer;
     } catch (e) {

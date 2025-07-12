@@ -113,43 +113,37 @@ class P2PManager extends ChangeNotifier {
       // Get remote offer
       _logger.info('👂 Waiting for remote offer...');
       try {
-        final offer = await _signalingService.onRemoteOffer(roomId).first;
+        final remoteOffer = await _signalingService.onRemoteOffer(roomId).first;
         _logger.success('📥 Received remote offer successfully!');
-        await _webRTCService.setRemoteDescription(offer);
+        await _webRTCService.setRemoteDescription(remoteOffer);
         _logger.success('✅ Remote description set successfully!');
 
-        // Create & send answer
+        // Create answer with WebRTC constraints
         _logger.info('📤 Creating answer...');
-        final answer = await _webRTCService.createAnswer();
+        final answer = await _webRTCService.createAnswer({
+          'offerToReceiveAudio': 1,
+          'offerToReceiveVideo': 0,
+        });
         await _webRTCService.setLocalDescription(answer);
         _logger.success('✅ Answer created and local description set');
         
+        // Send answer to signaling server
         _logger.info('📤 Sending answer to Firestore...');
         await _signalingService.joinRoom(roomId, answer);
         _logger.success('✅ Answer sent to Firestore successfully');
+        
+        // Set room state
+        _currentRoomId = roomId;
+        _isCaller = false;
       } catch (e) {
         _logger.error('❌ Failed to get remote offer or send answer: $e');
         throw Exception('Signaling failed: $e');
       }
 
-      _isCaller = false;
-
       // Setup ICE candidates listener
       _logger.info('👂 Setting up ICE listener for callee...');
-      _iceSubscription = _signalingService.onRemoteIce(roomId, false).listen(
-        (candidate) async {
-          _logger.debug('🧊 Callee received remote ICE candidate');
-          try {
-            await _webRTCService.addIceCandidate(candidate);
-            _logger.debug('✅ ICE candidate added successfully');
-          } catch (e) {
-            _logger.error('❌ Failed to add ICE candidate: $e');
-          }
-        },
-        onError: (error) {
-          _logger.error('❌ ICE listening error: $error');
-          _handleError('ICE listening error: $error');
-        },
+      _iceSubscription = _signalingService.onRemoteIce(_currentRoomId!, _isCaller).listen(
+        (c) => _webRTCService.addIceCandidate(c),
       );
 
       _logger.success('✅ Successfully joined room: $roomId');
@@ -202,20 +196,8 @@ class P2PManager extends ChangeNotifier {
 
       // Listen for ICE candidates (caller)
       _logger.info('👂 Setting up ICE listener for caller...');
-      _iceSubscription = _signalingService.onRemoteIce(_currentRoomId!, true).listen(
-        (candidate) async {
-          _logger.debug('🧊 Caller received remote ICE candidate');
-          try {
-            await _webRTCService.addIceCandidate(candidate);
-            _logger.debug('✅ ICE candidate added successfully');
-          } catch (e) {
-            _logger.error('❌ Failed to add ICE candidate: $e');
-          }
-        },
-        onError: (error) {
-          _logger.error('❌ ICE listening error: $error');
-          _handleError('ICE listening error: $error');
-        },
+      _iceSubscription = _signalingService.onRemoteIce(_currentRoomId!, _isCaller).listen(
+        (c) => _webRTCService.addIceCandidate(c),
       );
     }
   }
@@ -281,12 +263,12 @@ class P2PManager extends ChangeNotifier {
     };
 
     // ICE candidate callback - writes ICE to Firestore
-    _webRTCService.onIceCandidate = (RTCIceCandidate candidate) async {
-      if (_currentRoomId != null) {
-        _logger.debug('🧊 Sending ICE candidate: ${candidate.candidate?.substring(0, 50)}...');
-        await _signalingService.sendIceCandidate(
-            _currentRoomId!, candidate, _isCaller);
+    _webRTCService.onIceCandidate = (c) {
+      if (_currentRoomId == null) {
+        debugPrint('⚠️  sendIceCandidate skipped: roomId is null');
+        return;
       }
+      _signalingService.sendIceCandidate(_currentRoomId!, c, _isCaller);
     };
 
     _webRTCService.onDataChannelReceived = (RTCDataChannel channel) {

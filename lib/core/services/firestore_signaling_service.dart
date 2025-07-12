@@ -13,12 +13,30 @@ class FirestoreSignalingService {
   Future<String> createRoom(RTCSessionDescription offer) async {
     try {
       _logger.info('🏠 Creating Firestore room');
+      _logger.debug('🔍 Offer SDP length: ${offer.sdp?.length ?? 0}');
+      _logger.debug('🔍 Offer type: ${offer.type}');
       
       final roomRef = _db.collection('rooms').doc();          // auto-id
-      await roomRef.set({
+      final roomData = {
         'offer': offer.toMap(),
         'createdAt': FieldValue.serverTimestamp(),
-      });
+        'status': 'waiting_for_answer',
+      };
+      
+      _logger.debug('🔍 Room data to save: ${roomData.keys.toList()}');
+      await roomRef.set(roomData);
+      
+      // Verify the data was saved
+      final savedDoc = await roomRef.get();
+      if (savedDoc.exists) {
+        final data = savedDoc.data();
+        _logger.success('✅ Room data verified in Firestore:');
+        _logger.debug('  📊 Has offer: ${data?['offer'] != null}');
+        _logger.debug('  📊 Status: ${data?['status']}');
+        _logger.debug('  📊 Created at: ${data?['createdAt']}');
+      } else {
+        _logger.error('❌ Room document not found after creation!');
+      }
       
       _logger.success('✅ Room created successfully: ${roomRef.id}');
       return roomRef.id;
@@ -32,12 +50,36 @@ class FirestoreSignalingService {
   Future<void> joinRoom(String roomId, RTCSessionDescription answer) async {
     try {
       _logger.info('🚪 Joining room $roomId');
+      _logger.debug('🔍 Answer SDP length: ${answer.sdp?.length ?? 0}');
+      _logger.debug('🔍 Answer type: ${answer.type}');
       
       final roomRef = _db.collection('rooms').doc(roomId);
+      
+      // First check if room exists
+      final roomDoc = await roomRef.get();
+      if (!roomDoc.exists) {
+        throw Exception('Room $roomId does not exist');
+      }
+      
+      final roomData = roomDoc.data();
+      _logger.debug('🔍 Room before join:');
+      _logger.debug('  📊 Has offer: ${roomData?['offer'] != null}');
+      _logger.debug('  📊 Has answer: ${roomData?['answer'] != null}');
+      _logger.debug('  📊 Status: ${roomData?['status']}');
+      
       await roomRef.update({
         'answer': answer.toMap(),
         'joinedAt': FieldValue.serverTimestamp(),
+        'status': 'answer_provided',
       });
+      
+      // Verify the answer was saved
+      final updatedDoc = await roomRef.get();
+      final updatedData = updatedDoc.data();
+      _logger.success('✅ Room updated in Firestore:');
+      _logger.debug('  📊 Has offer: ${updatedData?['offer'] != null}');
+      _logger.debug('  📊 Has answer: ${updatedData?['answer'] != null}');
+      _logger.debug('  📊 Status: ${updatedData?['status']}');
       
       _logger.success('✅ Successfully joined room: $roomId');
     } catch (e) {
@@ -52,16 +94,21 @@ class FirestoreSignalingService {
       final targetPath = isCaller ? 'caller' : 'callee';
       _logger.info('🧊 Sending ICE candidate (isCaller: $isCaller, saving to: $targetPath)');
       _logger.debug('🧊 ICE candidate: ${c.candidate?.substring(0, 50)}...');
+      _logger.debug('🧊 ICE sdpMid: ${c.sdpMid}');
+      _logger.debug('🧊 ICE sdpMLineIndex: ${c.sdpMLineIndex}');
       
-      await _db
+      final candidateData = c.toMap();
+      _logger.debug('🧊 ICE data keys: ${candidateData.keys.toList()}');
+      
+      final docRef = await _db
           .collection('rooms')
           .doc(roomId)
           .collection('candidates')
-          .doc(targetPath)
+          .doc(isCaller ? 'caller' : 'callee')
           .collection('list')
-          .add(c.toMap());
+          .add(candidateData);
       
-      _logger.success('✅ ICE candidate sent successfully');
+      _logger.success('✅ ICE candidate sent successfully to: ${docRef.path}');
     } catch (e) {
       _logger.error('❌ Failed to send ICE candidate: $e');
       rethrow;
@@ -79,6 +126,10 @@ class FirestoreSignalingService {
         .map((s) {
       final data = s.data()!;
       _logger.success('📥 Found remote offer in Firestore!');
+      _logger.debug('📊 Offer data keys: ${data['offer']?.keys?.toList() ?? []}');
+      _logger.debug('📊 SDP length: ${data['offer']?['sdp']?.length ?? 0}');
+      _logger.debug('📊 SDP type: ${data['offer']?['type']}');
+      
       return RTCSessionDescription(
         data['offer']['sdp'], data['offer']['type']);
     });
@@ -92,6 +143,10 @@ class FirestoreSignalingService {
         .map((s) {
       final data = s.data()!;
       _logger.success('📥 Found remote answer in Firestore!');
+      _logger.debug('📊 Answer data keys: ${data['answer']?.keys?.toList() ?? []}');
+      _logger.debug('📊 SDP length: ${data['answer']?['sdp']?.length ?? 0}');
+      _logger.debug('📊 SDP type: ${data['answer']?['type']}');
+      
       return RTCSessionDescription(
         data['answer']['sdp'], data['answer']['type']);
     });
@@ -102,7 +157,9 @@ class FirestoreSignalingService {
     _logger.info('👂 Listening for remote ICE (isCaller: $isCaller, listening to: $targetPath)');
     
     return _db
-        .collection('rooms/$roomId/candidates/$targetPath/list')
+        .collection('rooms/$roomId/candidates')
+        .doc(isCaller ? 'callee' : 'caller')
+        .collection('list')
         .snapshots()
         .expand((q) {
       _logger.info('📊 ICE snapshot received with ${q.docs.length} total docs, ${q.docChanges.length} changes');

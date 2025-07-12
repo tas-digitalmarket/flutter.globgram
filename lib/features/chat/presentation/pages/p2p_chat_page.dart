@@ -30,10 +30,10 @@ class _P2PChatPageState extends State<P2PChatPage> {
   void initState() {
     super.initState();
     _p2pBloc = P2PBlocFixed();
-    
+
     // Use CreateRoom for creator, JoinRoom for joiner
     if (widget.isCreator) {
-      _p2pBloc.add(CreateRoom());
+      _p2pBloc.add(const CreateRoom());
     } else {
       _p2pBloc.add(JoinRoom(widget.roomId));
     }
@@ -292,8 +292,8 @@ class _P2PChatPageState extends State<P2PChatPage> {
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        state.connectionInfo.roomId.isNotEmpty 
-                            ? '🆔 ${state.connectionInfo.roomId}' 
+                        state.connectionInfo.roomId.isNotEmpty
+                            ? '🆔 ${state.connectionInfo.roomId}'
                             : '⏳ Creating room...',
                         style: TextStyle(
                           fontSize: 20,
@@ -305,7 +305,7 @@ class _P2PChatPageState extends State<P2PChatPage> {
                       ),
                       const SizedBox(height: 12),
                       ElevatedButton.icon(
-                        onPressed: state.connectionInfo.roomId.isNotEmpty 
+                        onPressed: state.connectionInfo.roomId.isNotEmpty
                             ? () => _copyRoomId(state.connectionInfo.roomId)
                             : null,
                         icon: const Icon(Icons.copy),

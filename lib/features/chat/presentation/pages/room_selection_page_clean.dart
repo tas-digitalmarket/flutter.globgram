@@ -3,14 +3,14 @@ import 'package:easy_localization/easy_localization.dart';
 import 'p2p_chat_page.dart';
 
 /// Clean Room Selection Page - No fake Room IDs, only real Firestore implementation
-class RoomSelectionPage extends StatefulWidget {
-  const RoomSelectionPage({super.key});
+class RoomSelectionPageClean extends StatefulWidget {
+  const RoomSelectionPageClean({super.key});
 
   @override
-  State<RoomSelectionPage> createState() => _RoomSelectionPageState();
+  State<RoomSelectionPageClean> createState() => _RoomSelectionPageCleanState();
 }
 
-class _RoomSelectionPageState extends State<RoomSelectionPage> {
+class _RoomSelectionPageCleanState extends State<RoomSelectionPageClean> {
   final TextEditingController _roomController = TextEditingController();
   bool _hasRoomInput = false;
 
