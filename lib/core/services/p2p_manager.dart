@@ -169,6 +169,15 @@ class P2PManager extends ChangeNotifier {
     };
 
     await _webRTCService.initialize(configuration);
+    // هندل کردن ICE candidate
+    _webRTCService.onIceCandidate = (c) {
+      if (_currentRoomId == null) {
+        _logger.warning('⚠️ roomId is null, ICE candidate ثبت نشد');
+        return;
+      }
+      _logger.info('📤 ارسال ICE candidate به Firestore...');
+      _signalingService.sendIceCandidate(_currentRoomId!, c, _isCaller);
+    };
   }
 
   /// Set up signaling listeners for caller flow
@@ -263,17 +272,7 @@ class P2PManager extends ChangeNotifier {
       );
     };
 
-    // ICE candidate callback - writes ICE to Firestore
-    _webRTCService.onIceCandidate = (c) {
-      _logger.info('🧊 ICE candidate generated: ${c.candidate}');
-      if (_currentRoomId == null) {
-        _logger.warning('⚠️  roomId is null, buffering ICE candidate');
-        _pendingIceCandidates.add(c);
-        return;
-      }
-      _logger.info('📤 Sending ICE candidate to Firestore...');
-      _signalingService.sendIceCandidate(_currentRoomId!, c, _isCaller);
-    };
+    // ICE candidate callback is now set in _initializeWebRTC()
 
     _webRTCService.onDataChannelReceived = (RTCDataChannel channel) {
       _logger.info('📡 Data channel received by callee');

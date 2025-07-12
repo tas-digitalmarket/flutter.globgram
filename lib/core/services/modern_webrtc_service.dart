@@ -31,7 +31,25 @@ class ModernWebRTCService {
     try {
       _logger.info('🔧 Initializing WebRTC with configuration');
       
-      _peerConnection = await createPeerConnection(configuration);
+      // Ensure STUN servers are present
+      final config = {
+        'iceServers': [
+          {'urls': 'stun:stun.l.google.com:19302'},
+          {'urls': 'stun:stun1.l.google.com:19302'},
+        ]
+      };
+      // اگر کاربر iceServers سفارشی داد، اضافه کن
+      if (configuration['iceServers'] != null) {
+        (config['iceServers'] as List).addAll(configuration['iceServers'] as List);
+      }
+      _peerConnection = await createPeerConnection(config);
+      
+      // Set ICE candidate callback immediately after PeerConnection creation
+      _peerConnection!.onIceCandidate = (c) {
+        debugPrint('🚀 onIceCandidate fired, candidate: ${c.candidate}');
+        _logger.success('🧊 ICE candidate generated: ${c.candidate?.substring(0, 50)}...');
+        onIceCandidate?.call(c);
+      };
       
       // Enhanced connection state monitoring with immediate callback
       _peerConnection!.onConnectionState = (RTCPeerConnectionState state) {
@@ -44,11 +62,8 @@ class ModernWebRTCService {
         onConnectionStateChanged?.call(state);
       };
 
-      // Set up ICE candidate handling
-      _peerConnection!.onIceCandidate = (RTCIceCandidate candidate) {
-        _logger.success('🧊 ICE candidate generated: ${candidate.candidate?.substring(0, 50)}...');
-        onIceCandidate?.call(candidate);
-      };
+      // ICE candidate handling will be set up later by p2p_manager
+      // Don't set onIceCandidate here to avoid conflicts
 
       // Monitor ICE gathering state
       _peerConnection!.onIceGatheringState = (RTCIceGatheringState state) {
@@ -185,6 +200,17 @@ class ModernWebRTCService {
     } catch (e) {
       _logger.error('❌ Failed to create data channel: $e');
       rethrow;
+    }
+  }
+
+  /// Set ICE candidate callback (called by p2p_manager after initialization)
+  void setIceCandidateCallback(Function(RTCIceCandidate) callback) {
+    if (_peerConnection != null) {
+      _peerConnection!.onIceCandidate = (RTCIceCandidate candidate) {
+        _logger.success('🧊 ICE candidate generated: ${candidate.candidate?.substring(0, 50)}...');
+        callback(candidate);
+      };
+      _logger.info('✅ ICE candidate callback set');
     }
   }
 

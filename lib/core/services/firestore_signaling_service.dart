@@ -49,39 +49,17 @@ class FirestoreSignalingService {
   /// Join an existing room by setting the answer and updating participant info
   Future<void> joinRoom(String roomId, RTCSessionDescription answer) async {
     try {
-      _logger.info('🚪 Joining room $roomId');
+      _logger.info('🚪 Joining room: $roomId');
       _logger.debug('🔍 Answer SDP length: ${answer.sdp?.length ?? 0}');
       _logger.debug('🔍 Answer type: ${answer.type}');
       
-      final roomRef = _db.collection('rooms').doc(roomId);
-      
-      // First check if room exists
-      final roomDoc = await roomRef.get();
-      if (!roomDoc.exists) {
-        throw Exception('Room $roomId does not exist');
-      }
-      
-      final roomData = roomDoc.data();
-      _logger.debug('🔍 Room before join:');
-      _logger.debug('  📊 Has offer: ${roomData?['offer'] != null}');
-      _logger.debug('  📊 Has answer: ${roomData?['answer'] != null}');
-      _logger.debug('  📊 Status: ${roomData?['status']}');
-      
-      await roomRef.update({
+      await _db.collection('rooms').doc(roomId).update({
         'answer': answer.toMap(),
-        'joinedAt': FieldValue.serverTimestamp(),
-        'status': 'answer_provided',
+        'status': 'answered',
+        'answeredAt': FieldValue.serverTimestamp(),
       });
       
-      // Verify the answer was saved
-      final updatedDoc = await roomRef.get();
-      final updatedData = updatedDoc.data();
-      _logger.success('✅ Room updated in Firestore:');
-      _logger.debug('  📊 Has offer: ${updatedData?['offer'] != null}');
-      _logger.debug('  📊 Has answer: ${updatedData?['answer'] != null}');
-      _logger.debug('  📊 Status: ${updatedData?['status']}');
-      
-      _logger.success('✅ Successfully joined room: $roomId');
+      _logger.success('✅ Answer stored in room: $roomId');
     } catch (e) {
       _logger.error('❌ Failed to join room: $e');
       rethrow;
@@ -91,11 +69,7 @@ class FirestoreSignalingService {
   /// Send ICE candidate using proper schema structure
   Future<void> sendIceCandidate(String roomId, RTCIceCandidate c, bool isCaller) async {
     try {
-      _logger.info('🧊 Sending ICE candidate: ${isCaller ? "caller" : "callee"} -> room: $roomId');
-      _logger.debug('🔍 ICE candidate: ${c.candidate}');
-      _logger.debug('🔍 ICE sdpMid: ${c.sdpMid}');
-      _logger.debug('🔍 ICE sdpMLineIndex: ${c.sdpMLineIndex}');
-      
+      _logger.info('🧊 ارسال ICE candidate: ${isCaller ? "caller" : "callee"} -> room: $roomId');
       await _db
           .collection('rooms')
           .doc(roomId)
@@ -103,10 +77,9 @@ class FirestoreSignalingService {
           .doc(isCaller ? 'caller' : 'callee')
           .collection('list')
           .add(c.toMap());
-          
-      _logger.success('✅ ICE candidate sent successfully');
+      _logger.success('✅ ICE candidate با موفقیت ثبت شد');
     } catch (e) {
-      _logger.error('❌ Failed to send ICE candidate: $e');
+      _logger.error('❌ خطا در ثبت ICE candidate: $e');
       rethrow;
     }
   }
@@ -150,8 +123,7 @@ class FirestoreSignalingService {
 
   Stream<RTCIceCandidate> onRemoteIce(
     String roomId, bool isCaller) {
-    _logger.info('👂 Listening for remote ICE candidates: ${isCaller ? "callee" : "caller"} -> room: $roomId');
-    
+    _logger.info('👂 گوش دادن به ICE candidateهای طرف مقابل: ${isCaller ? "callee" : "caller"} -> room: $roomId');
     return _db
         .collection('rooms')
         .doc(roomId)
@@ -160,12 +132,12 @@ class FirestoreSignalingService {
         .collection('list')
         .snapshots()
         .map((querySnapshot) {
-          _logger.info('🧊 ICE snapshot received with ${querySnapshot.docs.length} docs');
+          _logger.info('🧊 تعداد ICE candidate دریافتی: ${querySnapshot.docs.length}');
           return querySnapshot.docChanges;
         })
         .expand((changes) => changes)
         .map((chg) {
-          _logger.success('📥 Received remote ICE candidate: ${chg.doc.data()}');
+          _logger.success('📥 ICE candidate طرف مقابل: ${chg.doc.data()}');
           return RTCIceCandidate(
                 chg.doc['candidate'],
                 chg.doc['sdpMid'],
@@ -233,15 +205,4 @@ class FirestoreSignalingService {
     _logger.info('🗑️ Disposing FirestoreSignalingService');
     // No specific cleanup needed for Firestore, but method is required by P2PManager
   }
-
-  /// Generate a room ID without creating the room yet
-  /// This allows setting _currentRoomId before ICE gathering starts
-  String generateRoomId() {
-    return _db.collection('rooms').doc().id;
-  }
-
-  /// Create a room with a pre-generated ID and offer
-  Future<void> createRoomWithId(String roomId, RTCSessionDescription offer) async {
-    try {
-      _logger.info('🏠 Creating Firestore room with ID: $roomId');
-      _logger.debug('🔍 Offer SDP length: ${offer.sdp?.length
+}
