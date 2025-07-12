@@ -9,11 +9,7 @@ import 'firestore_signaling_service.dart';
 
 /// Core P2P connection manager that handles WebRTC and Firestore signaling
 /// This is the main class for P2P functionality
-///
-/// Stage D Verification:
-/// ✅ BroadcastChannel completely eliminated 
-/// ✅ Firestore used ONLY for WebRTC signaling (offers/answers/ICE)
-/// ✅ All chat messages via RTCDataChannel exclusively
+/// ALL fake code removed - only real Firestore WebRTC implementation
 class P2PConnectionManager extends ChangeNotifier {
   final ModernWebRTCService _webRTCService = ModernWebRTCService();
   final FirestoreSignalingService _signalingService = FirestoreSignalingService();
@@ -44,6 +40,8 @@ class P2PConnectionManager extends ChangeNotifier {
   /// Create a room as caller and initialize P2P connections
   Future<String> createRoom() async {
     try {
+      _logger.info('🚀 P2PConnectionManager.createRoom() STARTED');
+      
       _logger.info('🏠 Creating room as caller');
 
       _updateConnectionInfo(_connectionInfo.copyWith(
@@ -51,20 +49,28 @@ class P2PConnectionManager extends ChangeNotifier {
       ));
 
       // Initialize WebRTC with STUN/TURN servers
+      _logger.info('🔧 Initializing WebRTC...');
       await _initializeWebRTC();
+      _logger.success('✅ WebRTC initialized');
       _setupWebRTCCallbacks();
 
       // Create data channel (caller creates)
+      _logger.info('📡 Creating data channel...');
       await _createDataChannel();
+      _logger.success('✅ Data channel created');
 
       // Create offer
+      _logger.info('📤 Creating offer...');
       final offer = await _webRTCService.createOffer();
       await _webRTCService.setLocalDescription(offer);
+      _logger.success('✅ Offer created and set as local description');
 
       // Create room with offer in Firestore - مهم
+      _logger.info('🏠 Creating room in Firestore...');
       final roomId = await _signalingService.createRoom(offer);
       _currentRoomId = roomId;
       _isCaller = true;
+      _logger.success('✅ Room created in Firestore: $roomId');
 
       _updateConnectionInfo(_connectionInfo.copyWith(
         roomId: roomId,
@@ -85,6 +91,11 @@ class P2PConnectionManager extends ChangeNotifier {
   /// Join a room as callee
   Future<void> joinRoom(String roomId) async {
     try {
+      // Add immediate logging to test if logger works
+      _logger.info('🚀 P2PConnectionManager.joinRoom() STARTED - Testing logger!');
+      print('🚀 P2PConnectionManager.joinRoom() STARTED - Console fallback!');
+      debugPrint('🚀 P2PConnectionManager.joinRoom() STARTED - Debug fallback!');
+      
       _logger.info('🚪 Joining room: $roomId as callee');
       _currentRoomId = roomId;
 

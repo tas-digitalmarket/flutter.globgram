@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:easy_localization/easy_localization.dart';
 import '../bloc/bloc_exports.dart';
@@ -9,10 +10,12 @@ import 'log_view_page.dart';
 
 class P2PChatPage extends StatefulWidget {
   final String roomId;
+  final bool isCreator;
 
   const P2PChatPage({
     super.key,
     required this.roomId,
+    this.isCreator = false, // Default is false (joiner/callee)
   });
 
   @override
@@ -27,7 +30,13 @@ class _P2PChatPageState extends State<P2PChatPage> {
   void initState() {
     super.initState();
     _p2pBloc = P2PBlocFixed();
-    _p2pBloc.add(JoinRoom(widget.roomId));
+    
+    // Use CreateRoom for creator, JoinRoom for joiner
+    if (widget.isCreator) {
+      _p2pBloc.add(CreateRoom());
+    } else {
+      _p2pBloc.add(JoinRoom(widget.roomId));
+    }
   }
 
   @override
@@ -191,7 +200,7 @@ class _P2PChatPageState extends State<P2PChatPage> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Text(
-                'Room: ${widget.roomId}',
+                'Room: ${connectionInfo.roomId.isNotEmpty ? connectionInfo.roomId : '⏳ Creating...'}',
                 style: TextStyle(
                   color: statusColor.withOpacity(0.8),
                   fontSize: 12,
@@ -230,7 +239,7 @@ class _P2PChatPageState extends State<P2PChatPage> {
               ),
               const SizedBox(height: 16),
               Text(
-                'Room: ${widget.roomId}',
+                'Room: ${state.connectionInfo.roomId.isNotEmpty ? state.connectionInfo.roomId : 'Loading...'}',
                 style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                       color: Colors.grey.shade600,
                       fontWeight: FontWeight.w600,
@@ -283,7 +292,9 @@ class _P2PChatPageState extends State<P2PChatPage> {
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        widget.roomId,
+                        state.connectionInfo.roomId.isNotEmpty 
+                            ? '🆔 ${state.connectionInfo.roomId}' 
+                            : '⏳ Creating room...',
                         style: TextStyle(
                           fontSize: 20,
                           fontFamily: 'monospace',
@@ -292,13 +303,27 @@ class _P2PChatPageState extends State<P2PChatPage> {
                           letterSpacing: 2,
                         ),
                       ),
+                      const SizedBox(height: 12),
+                      ElevatedButton.icon(
+                        onPressed: state.connectionInfo.roomId.isNotEmpty 
+                            ? () => _copyRoomId(state.connectionInfo.roomId)
+                            : null,
+                        icon: const Icon(Icons.copy),
+                        label: const Text('Copy Room ID'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.blue.shade600,
+                          foregroundColor: Colors.white,
+                        ),
+                      ),
                     ],
                   ),
                 ),
                 const SizedBox(height: 16),
               ],
               ElevatedButton.icon(
-                onPressed: () => _p2pBloc.add(JoinRoom(widget.roomId)),
+                onPressed: state.connectionInfo.roomId.isNotEmpty
+                    ? () => _p2pBloc.add(JoinRoom(state.connectionInfo.roomId))
+                    : null,
                 icon: const Icon(Icons.refresh),
                 label: Text('retry'.tr()),
                 style: ElevatedButton.styleFrom(
@@ -428,6 +453,17 @@ class _P2PChatPageState extends State<P2PChatPage> {
       _p2pBloc.add(SendMessage(message));
       _messageController.clear();
     }
+  }
+
+  void _copyRoomId(String roomId) {
+    Clipboard.setData(ClipboardData(text: roomId));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Room ID copied to clipboard: $roomId'),
+        backgroundColor: Colors.green,
+        duration: const Duration(seconds: 2),
+      ),
+    );
   }
 
   IconData _getConnectionIcon(PeerConnectionState state) {

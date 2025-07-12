@@ -49,17 +49,19 @@ class FirestoreSignalingService {
   /// Send ICE candidate using proper schema structure
   Future<void> sendIceCandidate(String roomId, RTCIceCandidate c, bool isCaller) async {
     try {
-      _logger.info('🧊 Sending ICE candidate (isCaller: $isCaller)');
+      final targetPath = isCaller ? 'caller' : 'callee';
+      _logger.info('🧊 Sending ICE candidate (isCaller: $isCaller, saving to: $targetPath)');
+      _logger.debug('🧊 ICE candidate: ${c.candidate?.substring(0, 50)}...');
       
       await _db
           .collection('rooms')
           .doc(roomId)
           .collection('candidates')
-          .doc(isCaller ? 'caller' : 'callee')
+          .doc(targetPath)
           .collection('list')
           .add(c.toMap());
       
-      _logger.success('✅ ICE candidate sent');
+      _logger.success('✅ ICE candidate sent successfully');
     } catch (e) {
       _logger.error('❌ Failed to send ICE candidate: $e');
       rethrow;
@@ -70,38 +72,51 @@ class FirestoreSignalingService {
   Stream<RTCSessionDescription> onRemoteOffer(String roomId) {
     _logger.info('👂 Listening for remote offer in room: $roomId');
     
-    return _db.doc('rooms/$roomId').snapshots().where((s) =>
-        s.data()?['offer'] != null).map((s) {
-      _logger.info('📥 Received remote offer');
+    // First, check if offer already exists, then listen for changes
+    return _db.doc('rooms/$roomId').snapshots()
+        .where((s) => s.exists && s.data() != null && s.data()!['offer'] != null)
+        .take(1) // Only take the first valid offer
+        .map((s) {
+      final data = s.data()!;
+      _logger.success('📥 Found remote offer in Firestore!');
       return RTCSessionDescription(
-        s['offer']['sdp'], s['offer']['type']);
+        data['offer']['sdp'], data['offer']['type']);
     });
   }
 
   Stream<RTCSessionDescription> onRemoteAnswer(String roomId) {
     _logger.info('👂 Listening for remote answer in room: $roomId');
     
-    return _db.doc('rooms/$roomId').snapshots().where((s) =>
-        s.data()?['answer'] != null).map((s) {
-      _logger.info('📥 Received remote answer');
+    return _db.doc('rooms/$roomId').snapshots()
+        .where((s) => s.exists && s.data() != null && s.data()!['answer'] != null)
+        .map((s) {
+      final data = s.data()!;
+      _logger.success('📥 Found remote answer in Firestore!');
       return RTCSessionDescription(
-        s['answer']['sdp'], s['answer']['type']);
+        data['answer']['sdp'], data['answer']['type']);
     });
   }
 
   Stream<RTCIceCandidate> onRemoteIce(String roomId, bool isCaller) {
-    _logger.info('👂 Listening for remote ICE (isCaller: $isCaller)');
+    final targetPath = isCaller ? 'callee' : 'caller';
+    _logger.info('👂 Listening for remote ICE (isCaller: $isCaller, listening to: $targetPath)');
     
     return _db
-        .collection('rooms/$roomId/candidates/${isCaller ? 'callee' : 'caller'}/list')
+        .collection('rooms/$roomId/candidates/$targetPath/list')
         .snapshots()
-        .expand((q) => q.docChanges)
+        .expand((q) {
+      _logger.info('📊 ICE snapshot received with ${q.docs.length} total docs, ${q.docChanges.length} changes');
+      return q.docChanges.where((c) => c.type == DocumentChangeType.added);
+    })
         .map((c) {
-      _logger.info('🧊 Received remote ICE candidate');
+      _logger.success('🧊 Processing new ICE candidate from remote peer');
+      final data = c.doc.data() as Map<String, dynamic>;
+      _logger.debug('🧊 ICE data: ${data.keys.toList()}');
+      
       return RTCIceCandidate(
-        c.doc['candidate'],
-        c.doc['sdpMid'],
-        c.doc['sdpMLineIndex'],
+        data['candidate'],
+        data['sdpMid'],
+        data['sdpMLineIndex'],
       );
     });
   }

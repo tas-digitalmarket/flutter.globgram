@@ -46,8 +46,24 @@ class ModernWebRTCService {
 
       // Set up ICE candidate handling
       _peerConnection!.onIceCandidate = (RTCIceCandidate candidate) {
-        _logger.debug('🧊 ICE candidate generated');
+        _logger.success('🧊 ICE candidate generated: ${candidate.candidate?.substring(0, 50)}...');
         onIceCandidate?.call(candidate);
+      };
+
+      // Monitor ICE gathering state
+      _peerConnection!.onIceGatheringState = (RTCIceGatheringState state) {
+        _logger.info('🧊 ICE gathering state: $state');
+        switch (state) {
+          case RTCIceGatheringState.RTCIceGatheringStateNew:
+            _logger.info('🧊 ICE gathering: New');
+            break;
+          case RTCIceGatheringState.RTCIceGatheringStateGathering:
+            _logger.info('🧊 ICE gathering: Gathering...');
+            break;
+          case RTCIceGatheringState.RTCIceGatheringStateComplete:
+            _logger.success('🧊 ICE gathering: Complete!');
+            break;
+        }
       };
 
       // Set up data channel receiving

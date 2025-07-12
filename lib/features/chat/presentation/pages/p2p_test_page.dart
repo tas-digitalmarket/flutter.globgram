@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import '../../../../core/services/p2p_manager.dart';
 import '../../../../core/models/p2p_models.dart';
+import '../../../../core/utils/app_logger.dart';
 
 class P2PTestPage extends StatefulWidget {
-  const P2PTestPage({Key? key}) : super(key: key);
+  const P2PTestPage({super.key});
 
   @override
   State<P2PTestPage> createState() => _P2PTestPageState();
@@ -11,6 +12,7 @@ class P2PTestPage extends StatefulWidget {
 
 class _P2PTestPageState extends State<P2PTestPage> {
   final P2PManager _p2pManager = P2PManager();
+  final AppLogger _logger = AppLogger();
   final TextEditingController _roomController = TextEditingController();
   final TextEditingController _messageController = TextEditingController();
 
@@ -26,6 +28,15 @@ class _P2PTestPageState extends State<P2PTestPage> {
   void initState() {
     super.initState();
     _setupP2PCallbacks();
+    _setupLoggerCallback();
+  }
+
+  void _setupLoggerCallback() {
+    _logger.onLogAdded = () {
+      if (mounted) {
+        setState(() {});
+      }
+    };
   }
 
   void _setupP2PCallbacks() {
@@ -71,6 +82,18 @@ class _P2PTestPageState extends State<P2PTestPage> {
     }
   }
 
+  void _createRoom() async {
+    try {
+      final roomId = await _p2pManager.createRoom();
+      setState(() {
+        _roomController.text = roomId;
+      });
+      print('📄 Room created with ID: $roomId');
+    } catch (e) {
+      print('❌ Failed to create room: $e');
+    }
+  }
+
   void _sendMessage() async {
     final message = _messageController.text.trim();
     if (message.isNotEmpty &&
@@ -104,7 +127,8 @@ class _P2PTestPageState extends State<P2PTestPage> {
                         style: const TextStyle(fontWeight: FontWeight.bold)),
                     const SizedBox(height: 8),
                     Text('Room ID: ${_connectionInfo.roomId}'),
-                    Text('Local Peer ID: ${_connectionInfo.localPeerId.isEmpty ? "Not generated yet" : _connectionInfo.localPeerId}'),
+                    Text(
+                        'Local Peer ID: ${_connectionInfo.localPeerId.isEmpty ? "Not generated yet" : _connectionInfo.localPeerId}'),
                     Text(
                         'Connected Peers: ${_connectionInfo.connectedPeers.length}'),
                     const SizedBox(height: 16),
@@ -118,6 +142,14 @@ class _P2PTestPageState extends State<P2PTestPage> {
                               border: OutlineInputBorder(),
                             ),
                           ),
+                        ),
+                        const SizedBox(width: 8),
+                        ElevatedButton(
+                          onPressed: _connectionInfo.connectionState ==
+                                  PeerConnectionState.disconnected
+                              ? _createRoom
+                              : null,
+                          child: const Text('Create Room'),
                         ),
                         const SizedBox(width: 8),
                         ElevatedButton(
@@ -138,6 +170,7 @@ class _P2PTestPageState extends State<P2PTestPage> {
 
             // Messages Section
             Expanded(
+              flex: 2,
               child: Card(
                 child: Padding(
                   padding: const EdgeInsets.all(16.0),
@@ -187,6 +220,74 @@ class _P2PTestPageState extends State<P2PTestPage> {
                             child: const Text('Send'),
                           ),
                         ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 16),
+
+            // Debug Logs Section
+            Expanded(
+              flex: 1,
+              child: Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Text('Debug Logs:',
+                              style: TextStyle(fontWeight: FontWeight.bold)),
+                          const Spacer(),
+                          ElevatedButton(
+                            onPressed: () {
+                              _logger.clear();
+                            },
+                            child: const Text('Clear'),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Expanded(
+                        child: Container(
+                          width: double.infinity,
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Colors.grey),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: ListView.builder(
+                            itemCount: _logger.logs.length,
+                            itemBuilder: (context, index) {
+                              final log = _logger.logs[index];
+                              return Padding(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8.0, vertical: 2.0),
+                                child: RichText(
+                                  text: TextSpan(
+                                    style: const TextStyle(
+                                        color: Colors.black, fontSize: 12),
+                                    children: [
+                                      TextSpan(
+                                        text: '[${log.formattedTime}] ',
+                                        style: const TextStyle(
+                                            color: Colors.grey),
+                                      ),
+                                      TextSpan(
+                                        text: '${log.prefix} ',
+                                        style: TextStyle(color: log.color),
+                                      ),
+                                      TextSpan(text: log.message),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
                       ),
                     ],
                   ),

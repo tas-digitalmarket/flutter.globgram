@@ -9,11 +9,7 @@ import 'firestore_signaling_service.dart';
 
 /// P2P Manager with Firestore signaling for real WebRTC state management
 /// Uses Firestore for signaling and WebRTC data channels for messaging
-/// 
-/// Stage D Verification:
-/// ✅ All fake signaling paths removed (BroadcastChannel eliminated)
-/// ✅ STUN/TURN servers properly configured
-/// ✅ RTCDataChannel is the ONLY messaging path
+/// ALL fake code removed - only real Firestore WebRTC implementation
 class P2PManager extends ChangeNotifier {
   final ModernWebRTCService _webRTCService = ModernWebRTCService();
   final FirestoreSignalingService _signalingService =
@@ -45,6 +41,8 @@ class P2PManager extends ChangeNotifier {
   /// Create a room as caller and initialize P2P connections
   Future<String> createRoom() async {
     try {
+      _logger.info('🚀 P2PManager.createRoom() STARTED');
+      
       _logger.info('🏠 Creating room as caller');
 
       _updateConnectionInfo(_connectionInfo.copyWith(
@@ -56,38 +54,37 @@ class P2PManager extends ChangeNotifier {
       await _initializeWebRTC();
       _logger.success('✅ WebRTC initialized');
       
-      _setupWebRTCCallbacks();
+      _setupPeerConnectionListeners();
 
       // Create data channel (caller creates)
       _logger.info('📡 Creating data channel...');
       await _createDataChannel();
       _logger.success('✅ Data channel created');
 
-      // Create offer
+      // Caller flow - Create offer and set local description
       _logger.info('📤 Creating offer...');
       final offer = await _webRTCService.createOffer();
       await _webRTCService.setLocalDescription(offer);
-      _logger.success('✅ Offer created and set');
+      _logger.success('✅ Offer created and set as local description');
 
-      // Create room with offer in Firestore - مهم
+      // Create room with offer in Firestore
       _logger.info('🏠 Creating room in Firestore...');
-      final roomId = await _signalingService.createRoom(offer);
-      _currentRoomId = roomId;
+      _currentRoomId = await _signalingService.createRoom(offer);
       _isCaller = true;
-      _logger.success('✅ Room created in Firestore: $roomId');
+      _logger.success('✅ Room created in Firestore: $_currentRoomId');
 
       _updateConnectionInfo(_connectionInfo.copyWith(
-        roomId: roomId,
+        roomId: _currentRoomId,
         localPeerId: 'caller_${DateTime.now().millisecondsSinceEpoch}',
       ));
 
-      // Start listening for answer and ICE candidates AFTER room creation
+      // Setup signaling listeners for answer and ICE candidates
       _logger.info('👂 Setting up signaling listeners...');
       _setupSignalingListeners();
       _logger.success('✅ Signaling listeners set up');
 
-      _logger.success('✅ Successfully created room: $roomId');
-      return roomId;
+      _logger.success('✅ Successfully created room: $_currentRoomId');
+      return _currentRoomId!;
     } catch (e) {
       _logger.error('❌ Failed to create room: $e');
       _handleError('Failed to create room: $e');
@@ -98,6 +95,8 @@ class P2PManager extends ChangeNotifier {
   /// Join a room as callee
   Future<void> joinRoom(String roomId) async {
     try {
+      _logger.info('🚀 P2PManager.joinRoom() STARTED');
+      
       _logger.info('🚪 Joining room: $roomId as callee');
       _currentRoomId = roomId;
 
@@ -109,26 +108,48 @@ class P2PManager extends ChangeNotifier {
 
       // Initialize WebRTC with STUN/TURN servers
       await _initializeWebRTC();
-      _setupWebRTCCallbacks();
+      _setupPeerConnectionListeners();
 
       // Get remote offer
-      final offer = await _signalingService.onRemoteOffer(roomId).first;
-      await _webRTCService.setRemoteDescription(offer);
+      _logger.info('👂 Waiting for remote offer...');
+      try {
+        final offer = await _signalingService.onRemoteOffer(roomId).first;
+        _logger.success('📥 Received remote offer successfully!');
+        await _webRTCService.setRemoteDescription(offer);
+        _logger.success('✅ Remote description set successfully!');
 
-      // Create & send answer
-      final answer = await _webRTCService.createAnswer();
-      await _webRTCService.setLocalDescription(answer);
-      await _signalingService.joinRoom(roomId, answer);
+        // Create & send answer
+        _logger.info('📤 Creating answer...');
+        final answer = await _webRTCService.createAnswer();
+        await _webRTCService.setLocalDescription(answer);
+        _logger.success('✅ Answer created and local description set');
+        
+        _logger.info('📤 Sending answer to Firestore...');
+        await _signalingService.joinRoom(roomId, answer);
+        _logger.success('✅ Answer sent to Firestore successfully');
+      } catch (e) {
+        _logger.error('❌ Failed to get remote offer or send answer: $e');
+        throw Exception('Signaling failed: $e');
+      }
 
       _isCaller = false;
 
       // Setup ICE candidates listener
+      _logger.info('👂 Setting up ICE listener for callee...');
       _iceSubscription = _signalingService.onRemoteIce(roomId, false).listen(
         (candidate) async {
-          _logger.debug('🧊 Received remote ICE candidate');
-          await _webRTCService.addIceCandidate(candidate);
+          _logger.debug('🧊 Callee received remote ICE candidate');
+          try {
+            await _webRTCService.addIceCandidate(candidate);
+            _logger.debug('✅ ICE candidate added successfully');
+          } catch (e) {
+            _logger.error('❌ Failed to add ICE candidate: $e');
+          }
         },
-        onError: (error) => _handleError('ICE listening error: $error'),
+        onError: (error) {
+          _logger.error('❌ ICE listening error: $error');
+          _handleError('ICE listening error: $error');
+        },
       );
 
       _logger.success('✅ Successfully joined room: $roomId');
@@ -155,48 +176,63 @@ class P2PManager extends ChangeNotifier {
     await _webRTCService.initialize(configuration);
   }
 
-  /// Set up signaling listeners for caller only (answer and ICE)
+  /// Set up signaling listeners for caller flow
   void _setupSignalingListeners() {
     if (_currentRoomId == null) return;
 
-    // Listen for answer (caller only) 
+    // Caller flow: Listen for remote answer
     if (_isCaller) {
+      _logger.info('👂 Setting up answer listener for caller...');
       _answerSubscription = _signalingService.onRemoteAnswer(_currentRoomId!).listen(
         (answer) async {
-          _logger.info('📩 Received remote answer');
-          await _webRTCService.setRemoteDescription(answer);
+          _logger.success('📩 Received remote answer from callee!');
+          try {
+            await _webRTCService.setRemoteDescription(answer);
+            _logger.success('✅ Remote answer description set successfully');
+          } catch (e) {
+            _logger.error('❌ Failed to set remote answer: $e');
+            _handleError('Failed to set remote answer: $e');
+          }
         },
-        onError: (error) => _handleError('Answer listening error: $error'),
+        onError: (error) {
+          _logger.error('❌ Answer listening error: $error');
+          _handleError('Answer listening error: $error');
+        },
       );
 
       // Listen for ICE candidates (caller)
+      _logger.info('👂 Setting up ICE listener for caller...');
       _iceSubscription = _signalingService.onRemoteIce(_currentRoomId!, true).listen(
         (candidate) async {
-          _logger.debug('🧊 Received remote ICE candidate');
-          await _webRTCService.addIceCandidate(candidate);
+          _logger.debug('🧊 Caller received remote ICE candidate');
+          try {
+            await _webRTCService.addIceCandidate(candidate);
+            _logger.debug('✅ ICE candidate added successfully');
+          } catch (e) {
+            _logger.error('❌ Failed to add ICE candidate: $e');
+          }
         },
-        onError: (error) => _handleError('ICE listening error: $error'),
+        onError: (error) {
+          _logger.error('❌ ICE listening error: $error');
+          _handleError('ICE listening error: $error');
+        },
       );
     }
   }
 
-  /// Set up WebRTC callbacks for real connection state monitoring
-  void _setupWebRTCCallbacks() {
+  /// Set up WebRTC peer connection listeners - writes ICE and flips UI state
+  void _setupPeerConnectionListeners() {
     _webRTCService.onConnectionStateChanged = (RTCPeerConnectionState state) {
       _logger.info('🔗 WebRTC connection state: $state');
 
-      // Enhanced connection state callback as requested - Step 1
+      // Enhanced connection state callback - flips UI state
       debugPrint('RTCPeerConnectionState: $state');
-      if (state == RTCPeerConnectionState.RTCPeerConnectionStateConnected) {
-        _updateConnectionInfo(
-          _connectionInfo.copyWith(connectionState: PeerConnectionState.connected),
-        );
-      }
-
+      
       PeerConnectionState newState;
       switch (state) {
         case RTCPeerConnectionState.RTCPeerConnectionStateConnecting:
           newState = PeerConnectionState.connecting;
+          _logger.info('🔄 Connection in progress...');
           break;
         case RTCPeerConnectionState.RTCPeerConnectionStateConnected:
           newState = PeerConnectionState.connected;
@@ -210,6 +246,7 @@ class P2PManager extends ChangeNotifier {
           break;
         default:
           newState = PeerConnectionState.disconnected;
+          _logger.warning('⚠️ Unknown connection state: $state');
       }
 
       _updateConnectionInfo(_connectionInfo.copyWith(
@@ -235,6 +272,7 @@ class P2PManager extends ChangeNotifier {
 
     _webRTCService.onDataChannelOpen = () {
       _logger.success('📡 Data channel opened - ready for messaging');
+      // Additional state update when data channel opens
       _updateConnectionInfo(
         _connectionInfo.copyWith(
           connectionState: PeerConnectionState.connected,
@@ -242,9 +280,10 @@ class P2PManager extends ChangeNotifier {
       );
     };
 
+    // ICE candidate callback - writes ICE to Firestore
     _webRTCService.onIceCandidate = (RTCIceCandidate candidate) async {
       if (_currentRoomId != null) {
-        _logger.debug('🧊 Sending ICE candidate');
+        _logger.debug('🧊 Sending ICE candidate: ${candidate.candidate?.substring(0, 50)}...');
         await _signalingService.sendIceCandidate(
             _currentRoomId!, candidate, _isCaller);
       }
@@ -256,8 +295,10 @@ class P2PManager extends ChangeNotifier {
       
       // Set up data channel state listener for callee
       _dataChannel!.onDataChannelState = (RTCDataChannelState state) {
+        _logger.info('📡 DataChannel state (callee): $state');
         debugPrint('RTCDataChannelState (callee): $state');
         if (state == RTCDataChannelState.RTCDataChannelOpen) {
+          _logger.success('📡 Callee data channel opened!');
           _updateConnectionInfo(
             _connectionInfo.copyWith(
               connectionState: PeerConnectionState.connected,

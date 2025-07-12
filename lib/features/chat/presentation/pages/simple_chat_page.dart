@@ -151,7 +151,7 @@ class _SimpleChatPageState extends State<SimpleChatPage> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.circle, color: Colors.green, size: 12),
+                const Icon(Icons.circle, color: Colors.green, size: 12),
                 const SizedBox(width: 8),
                 Text(
                   'connected'.tr(),

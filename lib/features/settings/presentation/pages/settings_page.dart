@@ -217,7 +217,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 ListTile(
                   title: const Text('Connection Status'),
                   subtitle: const Text('Ready for P2P connections'),
-                  leading: Icon(
+                  leading: const Icon(
                     Icons.wifi,
                     color: Colors.green,
                   ),

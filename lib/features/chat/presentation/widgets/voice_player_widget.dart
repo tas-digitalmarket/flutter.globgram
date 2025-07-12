@@ -78,7 +78,7 @@ class _VoicePlayerWidgetState extends State<VoicePlayerWidget> {
 
           // Waveform visualization
           Expanded(
-            child: Container(
+            child: SizedBox(
               height: 24,
               child: Row(
                 children: List.generate(15, (index) {

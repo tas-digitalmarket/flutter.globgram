@@ -1,7 +1,7 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
 import '../../../../core/models/p2p_models.dart';
-import '../../../../core/services/p2p_connection_manager.dart';
+import '../../../../core/services/p2p_manager.dart';
 import '../../../../core/utils/app_logger.dart';
 
 // Events
@@ -110,11 +110,11 @@ class P2PMessage extends Equatable {
 
 // BLoC Implementation
 class P2PBlocFixed extends Bloc<P2PEvent, P2PState> {
-  final P2PConnectionManager _p2pManager;
+  final P2PManager _p2pManager;
   final AppLogger _logger = AppLogger();
 
-  P2PBlocFixed({P2PConnectionManager? p2pManager}) 
-      : _p2pManager = p2pManager ?? P2PConnectionManager(),
+  P2PBlocFixed({P2PManager? p2pManager}) 
+      : _p2pManager = p2pManager ?? P2PManager(),
         super(const P2PState()) {
     
     on<CreateRoom>(_onCreateRoom);
@@ -149,16 +149,20 @@ class P2PBlocFixed extends Bloc<P2PEvent, P2PState> {
 
   Future<void> _onCreateRoom(CreateRoom event, Emitter<P2PState> emit) async {
     try {
-      _logger.info('🏠 Creating room...');
+      _logger.info('🏠 BLoC: Creating room...');
       emit(state.copyWith(isLoading: true, clearError: true));
       
       final roomId = await _p2pManager.createRoom();
       
-      _logger.success('✅ Room created successfully: $roomId');
+      _logger.success('✅ BLoC: Room created successfully: $roomId');
+      _logger.info('🔄 BLoC: Updating state with roomId: $roomId');
+      
       emit(state.copyWith(
         isLoading: false,
         connectionInfo: state.connectionInfo.copyWith(roomId: roomId),
       ));
+      
+      _logger.info('🎯 BLoC: State updated. Current roomId in state: ${state.connectionInfo.roomId}');
     } catch (e) {
       _logger.error('❌ Failed to create room: $e');
       emit(state.copyWith(
@@ -240,8 +244,12 @@ class P2PBlocFixed extends Bloc<P2PEvent, P2PState> {
   }
 
   void _onConnectionChanged(P2PConnectionChanged event, Emitter<P2PState> emit) {
-    _logger.debug('🔄 Connection state updated: ${event.connectionInfo.connectionState}');
+    _logger.debug('🔄 BLoC: Connection state updated: ${event.connectionInfo.connectionState}');
+    _logger.debug('🔄 BLoC: Connection roomId: ${event.connectionInfo.roomId}');
+    
     emit(state.copyWith(connectionInfo: event.connectionInfo));
+    
+    _logger.debug('🎯 BLoC: After connection update, state roomId: ${state.connectionInfo.roomId}');
   }
 
   void _onMessageReceived(MessageReceived event, Emitter<P2PState> emit) {
